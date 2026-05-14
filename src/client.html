@@ -1151,6 +1151,24 @@
 
       // ==================== COMPONENTE: CHECKLISTS ====================
       const Checklists = {
+        // Convertir formato de fecha del spreadsheet a datetime-local (YYYY-MM-DDTHH:MM)
+        formatToDatetimeLocal(dateString) {
+          if (!dateString) return "";
+          // Soportar formatos: "2026-05-21", "2026-05-21 14:30", "2026-05-21T14:30"
+          const parts = dateString.replace("T", " ").split(" ");
+          if (parts.length === 1) {
+            return parts[0] + "T00:00"; // Si solo tiene fecha, agregar hora 00:00
+          }
+          return parts[0] + "T" + parts[1]; // Convertir espacio a T
+        },
+
+        // Convertir formato datetime-local a texto legible (YYYY-MM-DD HH:MM)
+        formatFromDatetimeLocal(datetimeString) {
+          if (!datetimeString) return "";
+          // Formato esperado: "2026-05-21T14:30"
+          return datetimeString.replace("T", " ");
+        },
+
         async create(e) {
           e.preventDefault();
 
@@ -1254,16 +1272,27 @@
                             <tr style="border-bottom: 1px solid #ddd;">
                               ${row
                                 .map((cell, cellIdx) => {
-                                  const isReadonly = cellIdx < 5;
-                                  const bgColor = isReadonly ? "#f0f0f0" : "#ffffcc";
+                                  const isReadonly = cellIdx < 4;
+                                  const isDateField = cellIdx >= 5 && cellIdx <= 8;
                                   const inputStyle = isReadonly
                                     ? "background: #f0f0f0; color: #666; border: 1px solid #ddd; padding: 8px; width: 100%; font-size: 13px;"
                                     : "background: #fffff0; color: #000; border: 1px solid #1a73e8; padding: 8px; width: 100%; font-size: 13px;";
+
+                                  let inputType = "text";
+                                  let inputValue = String(cell);
+
+                                  if (isDateField && inputValue) {
+                                    inputType = "datetime-local";
+                                    inputValue = Checklists.formatToDatetimeLocal(inputValue);
+                                  } else if (isDateField) {
+                                    inputType = "datetime-local";
+                                  }
+
                                   return `
                                 <td style="padding: 0; border: 1px solid #ddd;">
                                   <input
-                                    type="text"
-                                    value="${String(cell)}"
+                                    type="${inputType}"
+                                    value="${inputValue}"
                                     data-phase="${phase.name}"
                                     data-row="${rowIdx}"
                                     data-col="${cellIdx}"
@@ -1313,7 +1342,12 @@
             phaseInputs.forEach((input) => {
               const rowIdx = parseInt(input.dataset.row);
               const colIdx = parseInt(input.dataset.col);
-              const value = input.value;
+              let value = input.value;
+
+              // Convertir datetime-local de vuelta a formato legible (YYYY-MM-DD HH:MM)
+              if (input.type === "datetime-local" && value) {
+                value = Checklists.formatFromDatetimeLocal(value);
+              }
 
               if (!phaseRows[rowIdx]) phaseRows[rowIdx] = [];
               phaseRows[rowIdx][colIdx] = value;
