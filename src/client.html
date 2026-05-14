@@ -1202,45 +1202,90 @@
 
         renderEditor() {
           const checklist = State.currentEditingChecklist;
+          if (!checklist || !checklist.phases || checklist.phases.length === 0) {
+            document.getElementById("mainContent").innerHTML = `
+              <div style="padding: 20px; text-align: center;">
+                <p style="color: red; font-weight: bold;">Error: No se pudieron cargar los datos del checklist</p>
+                <button type="button" class="secondary" onclick="Router.navigate('my-checklists')">Volver</button>
+              </div>
+            `;
+            return;
+          }
+
           const mainContent = document.getElementById("mainContent");
+          const readonlyHeaders = ["Sec.", "Tipo de tarea", "Ámbito", "Descripción tarea", "Equipo Técnico"];
+          const editableHeaders = ["Inicio Previsto", "Fin Previsto", "Inicio Real", "Fin Real", "Nombre del Técnico", "Resultado"];
 
           mainContent.innerHTML = `
-            <h2 class="page-title">Editar Checklist</h2>
+            <h2 class="page-title">Editar Checklist - Llenar Información Real</h2>
             <div class="button-group" style="margin-bottom: 20px;">
-              <button type="button" onclick="Checklists.save()">Guardar Cambios</button>
-              <button type="button" class="secondary" onclick="Router.navigate('my-checklists')">Volver</button>
+              <button type="button" onclick="Checklists.save()">✓ Guardar Cambios</button>
+              <button type="button" class="secondary" onclick="Router.navigate('my-checklists')">✕ Volver</button>
             </div>
+
+            <div style="background: #f5f5f5; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+              <p style="margin: 0; color: #666; font-size: 14px;">
+                <strong style="color: #333;">Instrucciones:</strong> Complete los campos en <span style="color: #1a73e8; font-weight: bold;">azul</span>
+                mientras ejecuta la intervención. Los campos en <span style="color: #999;">gris</span> son de solo lectura.
+              </p>
+            </div>
+
             ${checklist.phases
               .map(
                 (phase) => `
-              <div style="margin-bottom: 30px;">
-                <h3 style="background: ${phase.color}; color: white; padding: 10px; margin-bottom: 0; border-radius: 4px 4px 0 0;">
+              <div style="margin-bottom: 40px;">
+                <div style="background: ${phase.color}; color: white; padding: 12px 15px; border-radius: 4px 4px 0 0; font-weight: bold; font-size: 16px;">
                   ${phase.name}
-                </h3>
-                <div class="table-wrapper" style="overflow-x: auto;">
-                  <table class="phase-table" data-phase="${phase.name}">
+                </div>
+                <div style="overflow-x: auto; border: 1px solid #ddd; border-top: none;">
+                  <table class="phase-table" data-phase="${phase.name}" style="width: 100%; border-collapse: collapse;">
                     <thead>
-                      <tr>
-                        ${phase.headers.map((header) => `<th>${header}</th>`).join("")}
+                      <tr style="background: #f9f9f9;">
+                        ${readonlyHeaders.map((h) => `<th style="padding: 10px; text-align: left; border: 1px solid #ddd; background: #e8e8e8; color: #333; font-weight: bold; font-size: 13px;">${h}</th>`).join("")}
+                        ${editableHeaders.map((h) => `<th style="padding: 10px; text-align: left; border: 1px solid #ddd; background: #c3e0ff; color: #1a73e8; font-weight: bold; font-size: 13px;">${h}</th>`).join("")}
                       </tr>
                     </thead>
                     <tbody>
-                      ${phase.rows
-                        .map(
-                          (row, rowIdx) => `
-                        <tr>
-                          ${row
-                            .map(
-                              (cell, cellIdx) => {
-                                const isReadonly = cellIdx < 5;
-                                return `<td><input type="text" value="${cell}" data-phase="${phase.name}" data-row="${rowIdx}" data-col="${cellIdx}" ${isReadonly ? "readonly style='background: var(--gray-light);'" : ""} /></td>`;
-                              }
-                            )
-                            .join("")}
-                        </tr>
-                      `,
-                        )
-                        .join("")}
+                      ${
+                        phase.rows && phase.rows.length > 0
+                          ? phase.rows
+                              .map(
+                                (row, rowIdx) => `
+                            <tr style="border-bottom: 1px solid #ddd;">
+                              ${row
+                                .map((cell, cellIdx) => {
+                                  const isReadonly = cellIdx < 5;
+                                  const bgColor = isReadonly ? "#f0f0f0" : "#ffffcc";
+                                  const inputStyle = isReadonly
+                                    ? "background: #f0f0f0; color: #666; border: 1px solid #ddd; padding: 8px; width: 100%; font-size: 13px;"
+                                    : "background: #fffff0; color: #000; border: 1px solid #1a73e8; padding: 8px; width: 100%; font-size: 13px;";
+                                  return `
+                                <td style="padding: 0; border: 1px solid #ddd;">
+                                  <input
+                                    type="text"
+                                    value="${String(cell)}"
+                                    data-phase="${phase.name}"
+                                    data-row="${rowIdx}"
+                                    data-col="${cellIdx}"
+                                    style="${inputStyle}"
+                                    ${isReadonly ? "readonly" : ""}
+                                  />
+                                </td>
+                              `;
+                                })
+                                .join("")}
+                            </tr>
+                          `
+                              )
+                              .join("")
+                          : `
+                            <tr>
+                              <td colspan="${readonlyHeaders.length + editableHeaders.length}" style="padding: 20px; text-align: center; color: #999;">
+                                Sin pasos definidos
+                              </td>
+                            </tr>
+                          `
+                      }
                     </tbody>
                   </table>
                 </div>
@@ -1248,9 +1293,10 @@
             `
               )
               .join("")}
+
             <div class="button-group">
-              <button type="button" onclick="Checklists.save()">Guardar Cambios</button>
-              <button type="button" class="secondary" onclick="Router.navigate('my-checklists')">Volver</button>
+              <button type="button" onclick="Checklists.save()">✓ Guardar Cambios</button>
+              <button type="button" class="secondary" onclick="Router.navigate('my-checklists')">✕ Volver</button>
             </div>
           `;
         },

@@ -513,13 +513,7 @@ function createChecklist(
     // Línea 6: Version value
     newSheet.appendRow(["V01", "PERÚ", "", "", "", "", "", "", "", "", ""]);
 
-    // Línea 7: Empty row
-    newSheet.appendRow(["", "", "", "", "", "", "", "", "", "", ""]);
-
-    // Línea 8: Empty row
-    newSheet.appendRow(["", "", "", "", "", "", "", "", "", "", ""]);
-
-    // Línea 10: Table headers (UNA SOLA VEZ)
+    // Línea 7: Table headers (UNA SOLA VEZ)
     const tableHeaders = [
       "Sec.",
       "Tipo de tarea",
@@ -686,8 +680,8 @@ function getChecklistData(spreadsheetId: string): Record<string, unknown> {
     const sheet = ss.getSheets()[0];
     const data = sheet.getDataRange().getValues() as unknown[][];
 
-    // Línea 10 (índice 9) contiene los headers de la tabla
-    const tableHeaders = data[9] ? data[9].map((h) => String(h || "")) : [];
+    // Línea 7 (índice 6) contiene los headers de la tabla
+    const tableHeaders = data[6] ? data[6].map((h) => String(h || "")) : [];
 
     const phaseDefinitions = [
       { name: "PRE-INTERVENCIÓN", color: "#d32f2f", phaseNumber: 1 },
@@ -697,7 +691,7 @@ function getChecklistData(spreadsheetId: string): Record<string, unknown> {
     ];
 
     const parsedPhases: Record<string, unknown>[] = [];
-    let i = 10; // Comienza en línea 11 (índice 10)
+    let i = 7; // Comienza en línea 8 (índice 7) - primera fase
 
     for (const phaseDef of phaseDefinitions) {
       if (i >= data.length) break;
@@ -772,12 +766,12 @@ function saveChecklistData(spreadsheetId: string, data: Record<string, unknown>)
     // Actualizar datos de cada fase
     phases.forEach((phase: unknown) => {
       const phaseData = phase as Record<string, unknown>;
-      const startRow = (phaseData.startRow as number) + 1; // +1 para el encabezado de fase, +1 para convertir a 1-indexed
+      const phaseHeaderRow = phaseData.startRow as number; // Línea del encabezado de la fase
       const rows = phaseData.rows as unknown[][];
 
-      // Actualizar filas de datos
+      // Actualizar filas de datos (comienzan después del encabezado de fase)
       rows.forEach((row, rowIdx) => {
-        const targetRow = startRow + 1 + rowIdx; // +1 para headers
+        const targetRow = phaseHeaderRow + 1 + rowIdx; // Línea del encabezado + 1 + índice
         sheet.getRange(targetRow, 1, 1, (row as unknown[]).length).setValues([row]);
       });
     });
