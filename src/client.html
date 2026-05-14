@@ -1,0 +1,1495 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Plataforma de Operadores</title>
+    <link rel="stylesheet" href="#" id="themeLink" />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      :root {
+        --primary: #1a73e8;
+        --primary-dark: #1557b0;
+        --success: #4caf50;
+        --danger: #d32f2f;
+        --warning: #ff9800;
+        --gray-light: #f5f5f5;
+        --gray-medium: #999;
+        --gray-dark: #333;
+        --border: #ddd;
+        --shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: var(--gray-light);
+        padding: 20px;
+      }
+
+      .app-container {
+        max-width: 1400px;
+        margin: 0 auto;
+      }
+
+      .app-layout {
+        display: grid;
+        grid-template-columns: 250px 1fr;
+        gap: 20px;
+      }
+
+      @media (max-width: 768px) {
+        .app-layout {
+          grid-template-columns: 1fr;
+        }
+        .sidebar {
+          order: 2;
+        }
+      }
+
+      header {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        box-shadow: var(--shadow);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        grid-column: 1 / -1;
+      }
+
+      header h1 {
+        color: var(--primary);
+        font-size: 24px;
+        margin-bottom: 5px;
+      }
+
+      header .subtitle {
+        color: var(--gray-medium);
+        font-size: 13px;
+      }
+
+      .user-info {
+        text-align: right;
+        font-size: 12px;
+        color: var(--gray-medium);
+      }
+
+      .role-badge {
+        background: #e8f0fe;
+        color: var(--primary);
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-weight: 600;
+        font-size: 12px;
+        margin-top: 5px;
+        display: inline-block;
+      }
+
+      .sidebar {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+        height: fit-content;
+        position: sticky;
+        top: 20px;
+      }
+
+      .sidebar h3 {
+        font-size: 13px;
+        color: var(--gray-dark);
+        margin-bottom: 15px;
+        text-transform: uppercase;
+        font-weight: 600;
+      }
+
+      .sidebar-menu {
+        list-style: none;
+      }
+
+      .sidebar-menu li {
+        margin-bottom: 8px;
+      }
+
+      .sidebar-menu button {
+        width: 100%;
+        padding: 10px 15px;
+        border: none;
+        background: var(--gray-light);
+        color: var(--gray-dark);
+        border-radius: 4px;
+        cursor: pointer;
+        text-align: left;
+        font-size: 13px;
+        transition: all 0.2s;
+        font-weight: 500;
+      }
+
+      .sidebar-menu button:hover {
+        background: var(--primary);
+        color: white;
+      }
+
+      .sidebar-menu button.active {
+        background: var(--primary);
+        color: white;
+      }
+
+      .main-content {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+      }
+
+      .page-title {
+        font-size: 20px;
+        color: var(--gray-dark);
+        margin-bottom: 20px;
+        padding-bottom: 15px;
+        border-bottom: 2px solid var(--gray-light);
+      }
+
+      .form-section {
+        margin-bottom: 30px;
+      }
+
+      .form-group {
+        margin-bottom: 15px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: 600;
+        color: var(--gray-dark);
+        font-size: 13px;
+      }
+
+      input[type="text"],
+      input[type="date"],
+      select,
+      textarea {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        font-size: 13px;
+        font-family: inherit;
+      }
+
+      input:focus,
+      select:focus,
+      textarea:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.1);
+      }
+
+      .form-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+      }
+
+      button {
+        background: var(--primary);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 4px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      button:hover {
+        background: var(--primary-dark);
+      }
+
+      button.secondary {
+        background: var(--gray-light);
+        color: var(--gray-dark);
+      }
+
+      button.secondary:hover {
+        background: #e0e0e0;
+      }
+
+      button.danger {
+        background: var(--danger);
+      }
+
+      button.danger:hover {
+        background: #b71c1c;
+      }
+
+      .button-group {
+        display: flex;
+        gap: 10px;
+        margin-top: 20px;
+      }
+
+      .table-wrapper {
+        overflow-x: auto;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+
+      th {
+        background: #f8f9fa;
+        padding: 12px;
+        text-align: left;
+        font-weight: 600;
+        color: var(--gray-dark);
+        border-bottom: 2px solid var(--border);
+      }
+
+      td {
+        padding: 12px;
+        border-bottom: 1px solid #eee;
+      }
+
+      tr:hover {
+        background: var(--gray-light);
+      }
+
+      .status-badge {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 600;
+      }
+
+      .status-pending {
+        background: #fff3cd;
+        color: #856404;
+      }
+
+      .status-defined {
+        background: #d4edda;
+        color: #155724;
+      }
+
+      .action-btn {
+        padding: 6px 12px;
+        margin-right: 5px;
+        font-size: 11px;
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      .modal {
+        display: none;
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        align-items: center;
+        justify-content: center;
+      }
+
+      .modal.active {
+        display: flex;
+      }
+
+      .modal-content {
+        background: white;
+        padding: 30px;
+        border-radius: 8px;
+        width: 90%;
+        max-width: 900px;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+      }
+
+      .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        border-bottom: 2px solid var(--gray-light);
+        padding-bottom: 15px;
+      }
+
+      .modal-header h2 {
+        color: var(--primary);
+      }
+
+      .close-btn {
+        background: none;
+        border: none;
+        font-size: 28px;
+        cursor: pointer;
+        color: var(--gray-medium);
+      }
+
+      .info-box {
+        background: #e3f2fd;
+        border-left: 4px solid var(--primary);
+        padding: 12px;
+        border-radius: 4px;
+        margin-bottom: 15px;
+        font-size: 12px;
+        color: #0d47a1;
+      }
+
+      .empty-state {
+        text-align: center;
+        padding: 40px;
+        color: var(--gray-medium);
+      }
+
+      .phase {
+        background: var(--gray-light);
+        border-left: 4px solid var(--primary);
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 4px;
+      }
+
+      .phase h3 {
+        color: var(--primary);
+        margin-bottom: 15px;
+        font-size: 13px;
+      }
+
+      .steps-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 15px;
+      }
+
+      .steps-table th,
+      .steps-table td {
+        border: 1px solid var(--border);
+        padding: 8px;
+        font-size: 12px;
+      }
+
+      .steps-table th {
+        background: #e8f0fe;
+        font-weight: 600;
+      }
+
+      .steps-table input {
+        width: 100%;
+        padding: 4px;
+        border: 1px solid var(--border);
+        font-size: 12px;
+      }
+
+      .auth-error {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        border-left: 4px solid var(--danger);
+      }
+
+      .auth-error h2 {
+        color: var(--danger);
+        margin-bottom: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-container">
+      <header id="header">
+        <div>
+          <h1>Cargando...</h1>
+          <p class="subtitle">Validando acceso</p>
+        </div>
+      </header>
+
+      <div id="authError" class="hidden">
+        <div class="auth-error">
+          <h2>⚠️ Acceso Denegado</h2>
+          <p id="authErrorMessage"></p>
+        </div>
+      </div>
+
+      <div id="appContent" class="hidden">
+        <div class="app-layout">
+          <aside class="sidebar" id="sidebar"></aside>
+          <main class="main-content" id="mainContent"></main>
+        </div>
+      </div>
+
+      <div id="stepsModal" class="modal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2 id="modalTitle">Editar Pasos</h2>
+            <button class="close-btn" onclick="UI.closeModal()">×</button>
+          </div>
+          <div class="info-box">
+            <strong>Instrucciones:</strong> Define los pasos para cada fase:
+            <strong>PRE-INTERVENCIÓN</strong>, <strong>INTERVENCIÓN</strong>,
+            <strong>POST-INTERVENCIÓN</strong> y <strong>RETORNO</strong>
+          </div>
+          <div class="phases" id="phasesContainer"></div>
+          <div class="button-group">
+            <button type="button" onclick="StepsEditor.save()">Guardar Pasos</button>
+            <button type="button" class="secondary" onclick="UI.closeModal()">Cancelar</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="userModal" class="modal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2 id="userModalTitle">Agregar Usuario</h2>
+            <button class="close-btn" onclick="UI.closeUserModal()">×</button>
+          </div>
+          <form id="userForm" class="form-section">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="userEmail">Email</label>
+                <input type="email" id="userEmail" placeholder="usuario@example.com" required />
+              </div>
+              <div class="form-group">
+                <label for="userName">Nombre</label>
+                <input type="text" id="userName" placeholder="Nombre completo" required />
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="userRol">Rol</label>
+                <select id="userRol" required>
+                  <option value="">Seleccionar...</option>
+                  <option value="ADMIN">ADMIN</option>
+                  <option value="LIDER-TEAM">LIDER-TEAM</option>
+                  <option value="OPERADOR">OPERADOR</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="userArea">Área</label>
+                <input type="text" id="userArea" placeholder="Área o Departamento" required />
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="userEstado">Estado</label>
+                <input type="text" id="userEstado" placeholder="Estado" />
+              </div>
+              <div class="form-group">
+                <label for="userActivo">Activo</label>
+                <select id="userActivo" required>
+                  <option value="SI">Sí</option>
+                  <option value="NO">No</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="button-group">
+              <button type="submit">Guardar Usuario</button>
+              <button type="button" class="secondary" onclick="UI.closeUserModal()">Cancelar</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- COMPONENTES Y LÓGICA -->
+    <script>
+      // ==================== ESTADO GLOBAL ====================
+      const State = {
+        currentUser: null,
+        cbas: [],
+        currentEditingCBA: null,
+        currentEditingChecklist: null,
+
+        setCurrentUser(user) {
+          this.currentUser = user;
+        },
+        setCBAs(cbas) {
+          this.cbas = cbas;
+        },
+        getCurrentUser() {
+          return this.currentUser;
+        },
+        getCBAs() {
+          return this.cbas;
+        },
+      };
+
+      // ==================== API ====================
+      const API = {
+        call(action, data = {}) {
+          return new Promise((resolve, reject) => {
+            google.script.run
+              .withSuccessHandler((result) => resolve(result))
+              .withFailureHandler((error) => reject(error))
+              .processRequest({ action, ...data });
+          });
+        },
+
+        async getCurrentUser() {
+          return this.call("getCurrentUser");
+        },
+
+        async getCBAs() {
+          return this.call("getCBAs");
+        },
+
+        async getCBASteps(cbaId) {
+          return this.call("getCBASteps", { cbaId });
+        },
+
+        async createCBA(cba) {
+          return this.call("createCBA", cba);
+        },
+
+        async saveCBASteps(cbaId, pasos) {
+          return this.call("saveCBASteps", { cbaId, pasos });
+        },
+
+        async deleteCBA(cbaId) {
+          return this.call("deleteCBA", { cbaId });
+        },
+
+        async createChecklist(crq, templateId, fechaInicio, fechaFin) {
+          return this.call("createChecklist", { crq, templateId, fechaInicio, fechaFin });
+        },
+
+        async getOperatorChecklists() {
+          return this.call("getOperatorChecklists");
+        },
+
+        async getChecklistData(spreadsheetId) {
+          return this.call("getChecklistData", { spreadsheetId });
+        },
+
+        async saveChecklistData(spreadsheetId, data) {
+          return this.call("saveChecklistData", { spreadsheetId, data });
+        },
+
+        async getUsers() {
+          return this.call("getUsers");
+        },
+
+        async toggleUserActive(email, active) {
+          return this.call("toggleUserActive", { email, active });
+        },
+
+        async createUser(user) {
+          return this.call("createUser", user);
+        },
+
+        async updateUser(user) {
+          return this.call("updateUser", user);
+        },
+      };
+
+      // ==================== UTILIDADES UI ====================
+      const UI = {
+        showAuthError(message) {
+          document.getElementById("authErrorMessage").textContent = message;
+          document.getElementById("authError").classList.remove("hidden");
+          document.getElementById("appContent").classList.add("hidden");
+        },
+
+        showApp() {
+          document.getElementById("authError").classList.add("hidden");
+          document.getElementById("appContent").classList.remove("hidden");
+        },
+
+        updateHeader() {
+          const user = State.getCurrentUser();
+          const header = document.getElementById("header");
+          header.innerHTML = `
+            <div>
+              <h1>${UI.getTitleForRole(user.rol)}</h1>
+              <p class="subtitle">Plataforma de Operadores</p>
+            </div>
+            <div class="user-info">
+              <div>👤 <strong>${user.nombre}</strong></div>
+              <div>${user.email}</div>
+              <span class="role-badge">${user.rol} - ${user.area}</span>
+            </div>
+          `;
+        },
+
+        getTitleForRole(rol) {
+          const titles = {
+            ADMIN: "Administración - Todas las Áreas",
+            "LIDER-TEAM": `Gestión de CBAs - ${State.getCurrentUser().area}`,
+            OPERADOR: "Crear Checklists",
+          };
+          return titles[rol] || "Plataforma de Operadores";
+        },
+
+        openModal(title) {
+          document.getElementById("modalTitle").textContent = title;
+          document.getElementById("stepsModal").classList.add("active");
+        },
+
+        closeModal() {
+          document.getElementById("stepsModal").classList.remove("active");
+          State.currentEditingCBA = null;
+        },
+
+        openUserModal(isEdit = false, user = null) {
+          const title = isEdit ? `Editar Usuario - ${user.email}` : "Agregar Usuario";
+          document.getElementById("userModalTitle").textContent = title;
+
+          const form = document.getElementById("userForm");
+          form.onsubmit = Users.save;
+
+          if (isEdit && user) {
+            document.getElementById("userEmail").value = user.email;
+            document.getElementById("userEmail").readOnly = true;
+            document.getElementById("userName").value = user.nombre;
+            document.getElementById("userRol").value = user.rol;
+            document.getElementById("userArea").value = user.area;
+            document.getElementById("userEstado").value = user.estado;
+            document.getElementById("userActivo").value = user.activo ? "SI" : "NO";
+          } else {
+            form.reset();
+            document.getElementById("userEmail").readOnly = false;
+            document.getElementById("userActivo").value = "SI";
+            Users.currentEditingUser = null;
+          }
+
+          document.getElementById("userModal").classList.add("active");
+        },
+
+        closeUserModal() {
+          document.getElementById("userModal").classList.remove("active");
+          document.getElementById("userForm").reset();
+        },
+      };
+
+      // ==================== COMPONENTE: SIDEBAR ====================
+      const Sidebar = {
+        render(user) {
+          const menu = this.getMenuForRole(user.rol);
+          const sidebar = document.getElementById("sidebar");
+          sidebar.innerHTML = `
+            <h3>Navegación</h3>
+            <ul class="sidebar-menu">
+              ${menu.map((item) => `
+                <li>
+                  <button
+                    class="sidebar-btn"
+                    data-view="${item.view}"
+                    onclick="Router.navigate('${item.view}')"
+                  >
+                    ${item.icon} ${item.label}
+                  </button>
+                </li>
+              `).join("")}
+            </ul>
+          `;
+
+          // Marcar el primer botón como activo
+          document.querySelector(".sidebar-btn").classList.add("active");
+        },
+
+        getMenuForRole(rol) {
+          const menus = {
+            ADMIN: [
+              { view: "all-cbas", label: "Todas las CBAs", icon: "📋" },
+              { view: "users", label: "Usuarios", icon: "👥" },
+            ],
+            "LIDER-TEAM": [
+              { view: "my-cbas", label: "Mis CBAs", icon: "📋" },
+              { view: "create-cba", label: "Crear CBA", icon: "➕" },
+            ],
+            OPERADOR: [
+              { view: "create-checklist", label: "Nuevo Checklist", icon: "✅" },
+              { view: "my-checklists", label: "Mis Checklists", icon: "📝" },
+            ],
+          };
+          return menus[rol] || [];
+        },
+      };
+
+      // ==================== COMPONENTE: CONTENIDO ====================
+      const Content = {
+        async render(view, user) {
+          const mainContent = document.getElementById("mainContent");
+
+          try {
+            switch (view) {
+              case "my-cbas":
+                await this.renderMyCBAs();
+                break;
+              case "create-cba":
+                this.renderCreateCBA();
+                break;
+              case "all-cbas":
+                await this.renderAllCBAs();
+                break;
+              case "users":
+                await this.renderUsers();
+                break;
+              case "create-checklist":
+                this.renderCreateChecklist();
+                break;
+              case "my-checklists":
+                await this.renderMyChecklists();
+                break;
+              default:
+                mainContent.innerHTML = `<div class="page-title">Vista no disponible</div>`;
+            }
+          } catch (error) {
+            mainContent.innerHTML = `<div class="auth-error"><h2>Error</h2><p>${error.message}</p></div>`;
+          }
+        },
+
+        async renderMyCBAs() {
+          const cbas = State.getCBAs();
+          const mainContent = document.getElementById("mainContent");
+
+          mainContent.innerHTML = `
+            <h2 class="page-title">Mis CBAs</h2>
+            ${cbas.length === 0 ? `
+              <div class="empty-state">
+                <p>No hay CBAs creadas aún</p>
+              </div>
+            ` : `
+              <div class="table-wrapper">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Código</th>
+                      <th>Nombre</th>
+                      <th>Categoría</th>
+                      <th>Estado</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${cbas.map((cba) => `
+                      <tr>
+                        <td>${cba.id}</td>
+                        <td><strong>${cba.codigo}</strong></td>
+                        <td>${cba.nombre}</td>
+                        <td>${cba.categoria}</td>
+                        <td>
+                          <span class="status-badge ${cba.estado.includes("pendientes") ? "status-pending" : "status-defined"}">
+                            ${cba.estado}
+                          </span>
+                        </td>
+                        <td>
+                          <button class="action-btn" onclick="StepsEditor.open('${cba.id}')">Editar Pasos</button>
+                          <button class="action-btn secondary" onclick="CBAs.delete('${cba.id}')">Eliminar</button>
+                        </td>
+                      </tr>
+                    `).join("")}
+                  </tbody>
+                </table>
+              </div>
+            `}
+          `;
+        },
+
+        renderCreateCBA() {
+          const mainContent = document.getElementById("mainContent");
+          mainContent.innerHTML = `
+            <h2 class="page-title">Crear Nueva CBA</h2>
+            <form id="createCbaForm" class="form-section">
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="cbaCodigo">Código CBA</label>
+                  <input type="text" id="cbaCodigo" placeholder="PER-N01-A-01-L03" required />
+                </div>
+                <div class="form-group">
+                  <label for="cbaCategoria">Categoría</label>
+                  <select id="cbaCategoria" required>
+                    <option value="">Seleccionar...</option>
+                    <option value="Actualización de firmware">Actualización de firmware</option>
+                    <option value="Gestión de Licencias">Gestión de Licencias</option>
+                    <option value="Apagado Físico/Lógico">Apagado Físico/Lógico</option>
+                    <option value="Gestión de parámetros">Gestión de parámetros</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="cbaNombre">Nombre CBA</label>
+                <input type="text" id="cbaNombre" placeholder="Nombre descriptivo" required />
+              </div>
+
+              <div class="form-group">
+                <label for="cbaDescripcion">Descripción</label>
+                <textarea id="cbaDescripcion" placeholder="Describe el propósito" required></textarea>
+              </div>
+
+              <div class="button-group">
+                <button type="submit">Crear CBA</button>
+                <button type="reset" class="secondary">Limpiar</button>
+              </div>
+            </form>
+          `;
+
+          document.getElementById("createCbaForm").addEventListener("submit", CBAs.create);
+        },
+
+        async renderAllCBAs() {
+          const cbas = State.getCBAs();
+          const mainContent = document.getElementById("mainContent");
+
+          mainContent.innerHTML = `
+            <h2 class="page-title">Todas las CBAs</h2>
+            <p>Total: ${cbas.length} CBAs</p>
+            <div class="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Área</th>
+                    <th>Nombre</th>
+                    <th>Categoría</th>
+                    <th>Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${cbas.map((cba) => `
+                    <tr>
+                      <td>${cba.area || "N/A"}</td>
+                      <td>${cba.nombre}</td>
+                      <td>${cba.categoria}</td>
+                      <td>
+                        <span class="status-badge ${cba.estado.includes("pendientes") ? "status-pending" : "status-defined"}">
+                          ${cba.estado}
+                        </span>
+                      </td>
+                    </tr>
+                  `).join("")}
+                </tbody>
+              </table>
+            </div>
+          `;
+        },
+
+        async renderUsers() {
+          const mainContent = document.getElementById("mainContent");
+          try {
+            const result = await API.getUsers();
+            if (result.status === "ok") {
+              const users = result.users;
+              mainContent.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                  <h2 class="page-title" style="margin-bottom: 0;">Gestión de Usuarios</h2>
+                  <button onclick="UI.openUserModal(false)">+ Agregar Usuario</button>
+                </div>
+                <p>Total: ${users.length} usuarios</p>
+                ${users.length === 0 ? `
+                  <div class="empty-state">
+                    <p>No hay usuarios registrados</p>
+                  </div>
+                ` : `
+                  <div class="table-wrapper">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Email</th>
+                          <th>Nombre</th>
+                          <th>Rol</th>
+                          <th>Área</th>
+                          <th>Estado</th>
+                          <th>Activo</th>
+                          <th>Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        ${users.map((user) => `
+                          <tr>
+                            <td>${user.email}</td>
+                            <td>${user.nombre}</td>
+                            <td>${user.rol}</td>
+                            <td>${user.area}</td>
+                            <td>${user.estado}</td>
+                            <td>
+                              <span class="status-badge ${user.activo ? "status-defined" : "status-pending"}">
+                                ${user.activo ? "✓ Sí" : "✗ No"}
+                              </span>
+                            </td>
+                            <td>
+                              <button class="action-btn secondary" onclick="Users.edit('${user.email}')">Editar</button>
+                              <button class="action-btn ${user.activo ? "danger" : "secondary"}" onclick="Users.toggleActive('${user.email}', ${!user.activo})">
+                                ${user.activo ? "Desactivar" : "Activar"}
+                              </button>
+                            </td>
+                          </tr>
+                        `).join("")}
+                      </tbody>
+                    </table>
+                  </div>
+                `}
+              `;
+            } else {
+              mainContent.innerHTML = `<div class="auth-error"><h2>Error</h2><p>${result.message}</p></div>`;
+            }
+          } catch (error) {
+            mainContent.innerHTML = `<div class="auth-error"><h2>Error</h2><p>${error.message}</p></div>`;
+          }
+        },
+
+        renderCreateChecklist() {
+          const cbas = State.getCBAs();
+          const mainContent = document.getElementById("mainContent");
+
+          mainContent.innerHTML = `
+            <h2 class="page-title">Crear Nuevo Checklist</h2>
+            <form id="createChecklistForm" style="max-width: 600px;">
+              <div class="form-group">
+                <label for="checklistCrq">CRQ</label>
+                <input type="text" id="checklistCrq" placeholder="Número de CRQ" required />
+              </div>
+
+              <div class="form-group">
+                <label for="checklistTemplate">Plantilla (CBA)</label>
+                <select id="checklistTemplate" required>
+                  <option value="">Selecciona una plantilla</option>
+                  ${cbas.map((cba) => `<option value="${cba.id}">${cba.nombre} (${cba.codigo})</option>`).join("")}
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="checklistFechaInicio">Fecha de Inicio</label>
+                <input type="date" id="checklistFechaInicio" required />
+              </div>
+
+              <div class="form-group">
+                <label for="checklistFechaFin">Fecha de Fin</label>
+                <input type="date" id="checklistFechaFin" required />
+              </div>
+
+              <div class="button-group">
+                <button type="submit">Construir Checklist</button>
+                <button type="reset" class="secondary">Limpiar</button>
+              </div>
+            </form>
+          `;
+
+          document.getElementById("createChecklistForm").addEventListener("submit", Checklists.create);
+        },
+
+        async renderMyChecklists() {
+          const mainContent = document.getElementById("mainContent");
+
+          try {
+            const result = await API.getOperatorChecklists();
+            if (!result) {
+              mainContent.innerHTML = `<div class="auth-error"><h2>Error</h2><p>No se pudo obtener checklists. Verifica que la tabla METADATOS esté configurada.</p></div>`;
+              return;
+            }
+            if (result.status === "ok") {
+              const checklists = result.checklists;
+              mainContent.innerHTML = `
+                <h2 class="page-title">Mis Checklists</h2>
+                ${checklists.length === 0 ? `
+                  <div class="empty-state">
+                    <p>No hay checklists creados aún</p>
+                  </div>
+                ` : `
+                  <div class="table-wrapper">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>CRQ</th>
+                          <th>Plantilla</th>
+                          <th>Fecha Inicio</th>
+                          <th>Fecha Fin</th>
+                          <th>Estado</th>
+                          <th>Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        ${checklists.map((checklist) => `
+                          <tr>
+                            <td><strong>${checklist.crq}</strong></td>
+                            <td>${checklist.templateId}</td>
+                            <td>${checklist.fechaInicio}</td>
+                            <td>${checklist.fechaFin}</td>
+                            <td>
+                              <span class="status-badge ${checklist.estado === "Activo" ? "status-pending" : "status-defined"}">
+                                ${checklist.estado}
+                              </span>
+                            </td>
+                            <td>
+                              ${checklist.spreadsheetId ? `<button type="button" class="action-btn" onclick="Checklists.edit('${checklist.spreadsheetId}')">Editar</button>` : `<span style="color: red;">Sin ID</span>`}
+                            </td>
+                          </tr>
+                        `).join("")}
+                      </tbody>
+                    </table>
+                  </div>
+                `}
+              `;
+            } else {
+              mainContent.innerHTML = `<div class="auth-error"><h2>Error</h2><p>${result.message}</p></div>`;
+            }
+          } catch (error) {
+            mainContent.innerHTML = `<div class="auth-error"><h2>Error</h2><p>${error.message}</p></div>`;
+          }
+        },
+      };
+
+      // ==================== COMPONENTE: ROUTER ====================
+      const Router = {
+        currentView: "my-cbas",
+
+        async navigate(view) {
+          this.currentView = view;
+
+          // Actualizar botón activo
+          document.querySelectorAll(".sidebar-btn").forEach((btn) => {
+            btn.classList.remove("active");
+          });
+          document.querySelector(`[data-view="${view}"]`).classList.add("active");
+
+          // Renderizar contenido
+          await Content.render(view, State.getCurrentUser());
+        },
+      };
+
+      // ==================== COMPONENTE: CBAs ====================
+      const CBAs = {
+        async create(e) {
+          e.preventDefault();
+
+          const newCBA = {
+            id: `N-${String(State.getCBAs().length + 1).padStart(2, "0")}-${Math.random().toString(36).substr(2, 2).toUpperCase()}`,
+            codigo: document.getElementById("cbaCodigo").value,
+            nombre: document.getElementById("cbaNombre").value,
+            categoria: document.getElementById("cbaCategoria").value,
+            descripcion: document.getElementById("cbaDescripcion").value,
+            responsable: State.getCurrentUser().nombre,
+            estado: "Pasos pendientes",
+          };
+
+          try {
+            const result = await API.createCBA(newCBA);
+            if (result.status === "ok") {
+              State.getCBAs().push(newCBA);
+              await Router.navigate("my-cbas");
+              alert("CBA creada exitosamente");
+            }
+          } catch (error) {
+            alert("Error: " + error);
+          }
+        },
+
+        async delete(cbaId) {
+          if (confirm("¿Eliminar esta CBA?")) {
+            try {
+              const result = await API.deleteCBA(cbaId);
+              if (result.status === "ok") {
+                State.setCBAs(State.getCBAs().filter((c) => c.id !== cbaId));
+                await Content.renderMyCBAs();
+                alert("CBA eliminada");
+              }
+            } catch (error) {
+              alert("Error: " + error);
+            }
+          }
+        },
+      };
+
+      // ==================== COMPONENTE: CHECKLISTS ====================
+      const Checklists = {
+        async create(e) {
+          e.preventDefault();
+
+          const crq = document.getElementById("checklistCrq").value;
+          const templateId = document.getElementById("checklistTemplate").value;
+          const fechaInicio = document.getElementById("checklistFechaInicio").value;
+          const fechaFin = document.getElementById("checklistFechaFin").value;
+
+          try {
+            const result = await API.createChecklist(crq, templateId, fechaInicio, fechaFin);
+            if (result.status === "ok") {
+              alert("Checklist creado exitosamente");
+              await Router.navigate("my-checklists");
+            } else {
+              alert("Error: " + result.message);
+            }
+          } catch (error) {
+            alert("Error: " + error);
+          }
+        },
+
+        async edit(spreadsheetId) {
+          try {
+            if (!spreadsheetId || spreadsheetId === "undefined") {
+              alert("Error: ID del spreadsheet no válido. Valor recibido: " + spreadsheetId);
+              return;
+            }
+
+            console.log("Frontend - Llamando API con spreadsheetId:", spreadsheetId);
+            const result = await API.getChecklistData(spreadsheetId);
+            console.log("Frontend - Resultado recibido:", result);
+            console.log("Frontend - Tipo de resultado:", typeof result);
+
+            if (!result) {
+              alert("Error: No se obtuvieron datos del checklist. result es null/undefined. ID usado: " + spreadsheetId);
+              return;
+            }
+            console.log("Frontend - result.status:", result.status);
+            if (result.status === "ok") {
+              console.log("Frontend - Headers:", result.headers);
+              console.log("Frontend - Rows count:", result.rows ? result.rows.length : "null");
+              State.currentEditingChecklist = { id: spreadsheetId, spreadsheetId, headers: result.headers, rows: result.rows };
+              this.renderEditor();
+            } else {
+              alert("Error: " + result.message + " (ID: " + spreadsheetId + ")");
+            }
+          } catch (error) {
+            alert("Error al editar checklist: " + error + " (ID usado: " + spreadsheetId + ")");
+          }
+        },
+
+        renderEditor() {
+          const checklist = State.currentEditingChecklist;
+          const mainContent = document.getElementById("mainContent");
+
+          mainContent.innerHTML = `
+            <h2 class="page-title">Editar Checklist</h2>
+            <div class="table-wrapper" style="overflow-x: auto;">
+              <table id="checklistTable">
+                <thead>
+                  <tr>
+                    ${checklist.headers.map((header, idx) => `<th>${header}</th>`).join("")}
+                  </tr>
+                </thead>
+                <tbody>
+                  ${checklist.rows
+                    .map(
+                      (row, rowIdx) => `
+                    <tr>
+                      ${row.map((cell, cellIdx) => {
+                        const isReadonly = cellIdx < 4;
+                        return `<td><input type="text" value="${cell}" data-row="${rowIdx}" data-col="${cellIdx}" ${isReadonly ? "readonly style='background: var(--gray-light);'" : ""} /></td>`;
+                      }).join("")}
+                    </tr>
+                  `,
+                    )
+                    .join("")}
+                </tbody>
+              </table>
+            </div>
+            <div class="button-group">
+              <button type="button" onclick="Checklists.save()">Guardar Cambios</button>
+              <button type="button" class="secondary" onclick="Router.navigate('my-checklists')">Volver</button>
+            </div>
+          `;
+        },
+
+        async save() {
+          const inputs = document.querySelectorAll("#checklistTable input");
+          const rows = [];
+
+          inputs.forEach((input) => {
+            const rowIdx = parseInt(input.dataset.row);
+            const colIdx = parseInt(input.dataset.col);
+            const value = input.value;
+
+            if (!rows[rowIdx]) rows[rowIdx] = [];
+            rows[rowIdx][colIdx] = value;
+          });
+
+          try {
+            const result = await API.saveChecklistData(State.currentEditingChecklist.spreadsheetId, { rows });
+            if (result.status === "ok") {
+              alert("Checklist guardado exitosamente");
+              await Router.navigate("my-checklists");
+            } else {
+              alert("Error: " + result.message);
+            }
+          } catch (error) {
+            alert("Error: " + error);
+          }
+        },
+      };
+
+      // ==================== COMPONENTE: USERS ====================
+      const Users = {
+        currentEditingUser: null,
+
+        async toggleActive(email, active) {
+          try {
+            const result = await API.toggleUserActive(email, active);
+            if (result.status === "ok") {
+              await Content.renderUsers();
+              alert(active ? "Usuario activado" : "Usuario desactivado");
+            } else {
+              alert("Error: " + result.message);
+            }
+          } catch (error) {
+            alert("Error: " + error);
+          }
+        },
+
+        async edit(email) {
+          try {
+            const result = await API.getUsers();
+            if (result.status === "ok") {
+              const user = result.users.find((u) => u.email === email);
+              if (user) {
+                this.currentEditingUser = user;
+                UI.openUserModal(true, user);
+              }
+            }
+          } catch (error) {
+            alert("Error: " + error);
+          }
+        },
+
+        async save(e) {
+          e.preventDefault();
+
+          const email = document.getElementById("userEmail").value;
+          const userData = {
+            email,
+            nombre: document.getElementById("userName").value,
+            rol: document.getElementById("userRol").value,
+            area: document.getElementById("userArea").value,
+            estado: document.getElementById("userEstado").value,
+            activo: document.getElementById("userActivo").value === "SI",
+          };
+
+          try {
+            const isEdit = Users.currentEditingUser !== null;
+            const result = isEdit
+              ? await API.updateUser(userData)
+              : await API.createUser(userData);
+
+            if (result.status === "ok") {
+              await Content.renderUsers();
+              UI.closeUserModal();
+              alert(isEdit ? "Usuario actualizado exitosamente" : "Usuario creado exitosamente");
+            } else {
+              alert("Error: " + result.message);
+            }
+          } catch (error) {
+            alert("Error: " + error);
+          }
+        },
+      };
+
+      // ==================== COMPONENTE: STEPS EDITOR ====================
+      const StepsEditor = {
+        async open(cbaId) {
+          const cba = State.getCBAs().find((c) => c.id === cbaId);
+          if (!cba) return;
+
+          State.currentEditingCBA = cba;
+          if (!cba.pasos) {
+            cba.pasos = { preIntervention: [], intervention: [], postIntervention: [], return: [] };
+          }
+
+          await this.loadSteps(cbaId);
+          UI.openModal(`Editar Pasos - ${cba.nombre}`);
+        },
+
+        async loadSteps(cbaId) {
+          try {
+            const result = await API.getCBASteps(cbaId);
+            if (result.status === "ok") {
+              State.currentEditingCBA.pasos = result.pasos;
+
+              // Recalcular números de sección para todas las fases
+              const phaseMap = {
+                preIntervention: "1",
+                intervention: "2",
+                postIntervention: "3",
+                return: "4",
+              };
+
+              Object.entries(phaseMap).forEach(([phaseKey, prefix]) => {
+                const steps = State.currentEditingCBA.pasos[phaseKey] || [];
+                steps.forEach((step, idx) => {
+                  step.sec = `${prefix}.${idx + 1}`;
+                });
+              });
+
+              this.render();
+            }
+          } catch (error) {
+            console.error("Error cargando pasos:", error);
+          }
+        },
+
+        render() {
+          const pasos = State.currentEditingCBA.pasos;
+          const phases = [
+            { key: "preIntervention", title: "PRE-INTERVENCIÓN", prefix: "1" },
+            { key: "intervention", title: "INTERVENCIÓN", prefix: "2" },
+            { key: "postIntervention", title: "POST-INTERVENCIÓN", prefix: "3" },
+            { key: "return", title: "RETORNO", prefix: "4" },
+          ];
+
+          const container = document.getElementById("phasesContainer");
+          container.innerHTML = "";
+
+          phases.forEach((phase) => {
+            const steps = pasos[phase.key] || [];
+            const phaseDiv = document.createElement("div");
+            phaseDiv.className = "phase";
+            phaseDiv.innerHTML = `
+              <h3>${phase.title}</h3>
+              <table class="steps-table">
+                <thead>
+                  <tr>
+                    <th>Sec.</th>
+                    <th>Tipo</th>
+                    <th>Descripción</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-${phase.key}"></tbody>
+              </table>
+              <button type="button" class="action-btn" style="background: var(--success);" onclick="StepsEditor.addStep('${phase.key}')">
+                + Agregar Paso
+              </button>
+            `;
+            container.appendChild(phaseDiv);
+
+            const tbody = document.getElementById(`tbody-${phase.key}`);
+            steps.forEach((step, idx) => {
+              const tr = document.createElement("tr");
+              tr.innerHTML = `
+                <td><input type="text" value="${step.sec}" data-phase="${phase.key}" data-idx="${idx}" data-field="sec" readonly style="background: var(--gray-light);" /></td>
+                <td><input type="text" value="${step.tipoTarea}" data-phase="${phase.key}" data-idx="${idx}" data-field="tipoTarea" /></td>
+                <td><input type="text" value="${step.descripcion}" data-phase="${phase.key}" data-idx="${idx}" data-field="descripcion" /></td>
+                <td><button type="button" class="action-btn danger" onclick="StepsEditor.deleteStep('${phase.key}', ${idx})">✕</button></td>
+              `;
+              tbody.appendChild(tr);
+            });
+          });
+        },
+
+        addStep(phaseKey) {
+          const steps = State.currentEditingCBA.pasos[phaseKey];
+          const phasePrefix = {
+            preIntervention: "1",
+            intervention: "2",
+            postIntervention: "3",
+            return: "4",
+          }[phaseKey];
+
+          const stepNumber = steps.length + 1;
+          const newSec = `${phasePrefix}.${stepNumber}`;
+
+          steps.push({
+            sec: newSec,
+            tipoTarea: "",
+            ambito: this.getAmbitoForPhase(phaseKey),
+            descripcion: "",
+          });
+          this.render();
+        },
+
+        deleteStep(phaseKey, idx) {
+          State.currentEditingCBA.pasos[phaseKey].splice(idx, 1);
+
+          // Recalcular números de sección para esta fase
+          const phasePrefix = {
+            preIntervention: "1",
+            intervention: "2",
+            postIntervention: "3",
+            return: "4",
+          }[phaseKey];
+
+          State.currentEditingCBA.pasos[phaseKey].forEach((step, index) => {
+            step.sec = `${phasePrefix}.${index + 1}`;
+          });
+
+          this.render();
+        },
+
+        getAmbitoForPhase(phaseKey) {
+          const ambitos = {
+            preIntervention: "Pre-Intervención",
+            intervention: "Intervención",
+            postIntervention: "Post-Intervención",
+            return: "Retorno",
+          };
+          return ambitos[phaseKey] || "";
+        },
+
+        async save() {
+          // Actualizar datos desde inputs
+          document.querySelectorAll(".steps-table input").forEach((input) => {
+            const phaseKey = input.dataset.phase;
+            const idx = parseInt(input.dataset.idx);
+            const field = input.dataset.field;
+            const value = input.value;
+
+            if (State.currentEditingCBA.pasos[phaseKey] && State.currentEditingCBA.pasos[phaseKey][idx]) {
+              State.currentEditingCBA.pasos[phaseKey][idx][field] =
+                field === "sec" ? parseInt(value) : value;
+            }
+          });
+
+          try {
+            const result = await API.saveCBASteps(State.currentEditingCBA.id, State.currentEditingCBA.pasos);
+            if (result.status === "ok") {
+              const totalSteps = Object.values(State.currentEditingCBA.pasos).reduce(
+                (sum, arr) => sum + arr.length,
+                0
+              );
+              State.currentEditingCBA.estado = totalSteps > 0 ? "Pasos definidos" : "Pasos pendientes";
+
+              await Content.renderMyCBAs();
+              UI.closeModal();
+              alert("Pasos guardados");
+            }
+          } catch (error) {
+            alert("Error: " + error);
+          }
+        },
+      };
+
+      // ==================== INICIALIZACIÓN ====================
+      async function init() {
+        try {
+          const userResult = await API.getCurrentUser();
+          if (userResult.status === "ok") {
+            State.setCurrentUser(userResult.user);
+            UI.updateHeader();
+
+            const cbasResult = await API.getCBAs();
+            if (cbasResult.status === "ok") {
+              State.setCBAs(cbasResult.cbas);
+            }
+
+            Sidebar.render(State.getCurrentUser());
+            UI.showApp();
+            await Router.navigate(Sidebar.getMenuForRole(State.getCurrentUser().rol)[0].view);
+          } else {
+            UI.showAuthError(userResult.message);
+          }
+        } catch (error) {
+          UI.showAuthError("Error: " + error);
+        }
+      }
+
+      init();
+    </script>
+  </body>
+</html>
