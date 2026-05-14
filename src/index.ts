@@ -136,6 +136,8 @@ function processRequest(data: Record<string, unknown>): Record<string, unknown> 
       return createUser(data as unknown as Record<string, unknown>);
     case "updateUser":
       return updateUser(data as unknown as Record<string, unknown>);
+    case "deleteChecklist":
+      return deleteChecklist(data.spreadsheetId as string);
     default:
       return {
         status: "error",
@@ -935,6 +937,44 @@ function updateUser(data: Record<string, unknown>): Record<string, unknown> {
     return {
       status: "error",
       message: `Error al actualizar usuario: ${error}`,
+    };
+  }
+}
+
+/** Delete a checklist spreadsheet and its metadata. */
+function deleteChecklist(spreadsheetId: string): Record<string, unknown> {
+  try {
+    // Delete the spreadsheet from Google Drive
+    try {
+      const file = DriveApp.getFileById(spreadsheetId);
+      DriveApp.getRootFolder().removeFile(file);
+    } catch (driveError) {
+      console.log("Aviso: No se pudo eliminar el spreadsheet: " + driveError);
+    }
+
+    // Delete the metadata record from METADATOS
+    if (!SHEETS_IDS.METADATOS) {
+      loadSheetIds();
+    }
+    const metadataSheet = SpreadsheetApp.openById(SHEETS_IDS.METADATOS).getSheets()[0];
+    const metadataData = metadataSheet.getDataRange().getValues() as unknown[][];
+
+    // Find and delete the row with this spreadsheetId
+    for (let i = metadataData.length - 1; i >= 1; i--) {
+      if (String(metadataData[i][3]) === spreadsheetId) {
+        metadataSheet.deleteRow(i + 1);
+        break;
+      }
+    }
+
+    return {
+      status: "ok",
+      message: "Checklist eliminado exitosamente",
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message: `Error al eliminar checklist: ${error}`,
     };
   }
 }

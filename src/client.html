@@ -599,6 +599,10 @@
         async updateUser(user) {
           return this.call("updateUser", user);
         },
+
+        async deleteChecklist(spreadsheetId) {
+          return this.call("deleteChecklist", { spreadsheetId });
+        },
       };
 
       // ==================== UTILIDADES UI ====================
@@ -1066,6 +1070,7 @@
                             </td>
                             <td>
                               ${checklist.spreadsheetId ? `<button type="button" class="action-btn" onclick="Checklists.edit('${checklist.spreadsheetId}')">Editar</button>` : `<span style="color: red;">Sin ID</span>`}
+                              <button type="button" class="action-btn danger" onclick="Checklists.delete('${checklist.spreadsheetId}', '${checklist.crq}')">Eliminar</button>
                             </td>
                           </tr>
                         `).join("")}
@@ -1287,6 +1292,22 @@
             }
           } catch (error) {
             alert("Error: " + error);
+          }
+        },
+
+        async delete(spreadsheetId, crq) {
+          if (confirm(`¿Eliminar checklist ${crq}? Esta acción no se puede deshacer.`)) {
+            try {
+              const result = await API.deleteChecklist(spreadsheetId);
+              if (result.status === "ok") {
+                await Content.renderMyChecklists();
+                alert("Checklist eliminado exitosamente");
+              } else {
+                alert("Error: " + result.message);
+              }
+            } catch (error) {
+              alert("Error al eliminar checklist: " + error);
+            }
           }
         },
       };
