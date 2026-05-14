@@ -502,7 +502,7 @@ function createChecklist(
     ]);
 
     // Línea 5: Empty row
-    newSheet.appendRow([]);
+    newSheet.appendRow(["", "", "", "", "", "", "", ""]);
 
     // Línea 6-7: Version info
     newSheet.appendRow(["Version", "", ""]);
