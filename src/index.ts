@@ -508,6 +508,15 @@ function createChecklist(
     newSheet.appendRow(["Version", "", ""]);
     newSheet.appendRow(["V01", "PERÚ", ""]);
 
+    // Línea 5: Empty row
+    newSheet.appendRow(["", "", "", "", "", "", "", "", "", "", ""]);
+
+    // Línea 6: Version label
+    newSheet.appendRow(["Version", "", "", "", "", "", "", "", "", "", ""]);
+
+    // Línea 7: Version value
+    newSheet.appendRow(["V01", "PERÚ", "", "", "", "", "", "", "", "", ""]);
+
     // Línea 8: Empty row
     newSheet.appendRow(["", "", "", "", "", "", "", "", "", "", ""]);
 
