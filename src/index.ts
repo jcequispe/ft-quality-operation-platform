@@ -677,43 +677,76 @@ function getOperatorChecklists(): Record<string, unknown> {
   }
 }
 
-/** Get data from a checklist spreadsheet. */
+/** Get data from a checklist spreadsheet and parse phases. */
 function getChecklistData(spreadsheetId: string): Record<string, unknown> {
   try {
-    console.log("1. spreadsheetId recibido:", spreadsheetId);
-    console.log("2. Tipo de spreadsheetId:", typeof spreadsheetId);
-    console.log("3. Largo del spreadsheetId:", spreadsheetId ? spreadsheetId.length : "null");
-
-    console.log("4. Intentando abrir spreadsheet...");
     const ss = SpreadsheetApp.openById(spreadsheetId);
-    console.log("5. Spreadsheet abierto exitosamente");
-
-    console.log("6. Obteniendo primera hoja...");
     const sheet = ss.getSheets()[0];
-    console.log("7. Hoja obtenida:", sheet.getName());
-
-    console.log("8. Obteniendo datos del rango...");
     const data = sheet.getDataRange().getValues() as unknown[][];
-    console.log("9. Datos obtenidos. Filas:", data.length);
 
-    console.log("10. Convirtiendo datos a JSON seguro...");
-    const headers = data[0] ? data[0].map((h) => String(h)) : [];
-    const rows = data.slice(1).map((row) => row.map((cell) => (cell === null || cell === undefined ? "" : String(cell))));
+    const phases = [
+      { name: "PRE-INTERVENCIÓN", color: "#d32f2f" },
+      { name: "INTERVENCIÓN", color: "#1a73e8" },
+      { name: "POST-INTERVENCIÓN", color: "#4caf50" },
+      { name: "RETORNO", color: "#999" },
+    ];
 
-    console.log("11. Headers convertidos:", headers.length);
-    console.log("12. Rows convertidas:", rows.length);
+    const parsedPhases: Record<string, unknown>[] = [];
+    let i = 8; // Comienza en línea 9 (índice 8)
 
-    console.log("13. Retornando resultado exitosamente");
-    const resultado = {
+    for (const phase of phases) {
+      if (i >= data.length) break;
+
+      // Encontrar encabezado de fase
+      if (String(data[i][0]).trim() !== phase.name) {
+        break;
+      }
+
+      const phaseData = {
+        name: phase.name,
+        color: phase.color,
+        startRow: i + 1, // Número de fila (1-indexed)
+        headers: [],
+        rows: [],
+      };
+
+      i++; // Siguiente fila (headers)
+
+      // Obtener headers de columna
+      if (i < data.length) {
+        phaseData.headers = data[i].map((h) => String(h || ""));
+        i++;
+      }
+
+      // Obtener filas de datos hasta encontrar la siguiente fase o fin
+      while (i < data.length) {
+        const firstCell = String(data[i][0] || "").trim();
+
+        // Si encuentra otra fase, detener
+        if (phases.some((p) => firstCell === p.name)) {
+          break;
+        }
+
+        // Si la fila está completamente vacía, puede ser fin de la fase
+        const rowHasData = data[i].some((cell) => cell !== null && cell !== undefined && String(cell).trim() !== "");
+        if (!rowHasData && i > 10) {
+          // Permitir algunas filas vacías al inicio, pero parar si está completamente vacía después de línea 10
+          break;
+        }
+
+        phaseData.rows.push(data[i].map((cell) => (cell === null || cell === undefined ? "" : String(cell))));
+        i++;
+      }
+
+      parsedPhases.push(phaseData);
+    }
+
+    return {
       status: "ok",
       spreadsheetId,
-      headers,
-      rows,
+      phases: parsedPhases,
     };
-    console.log("14. Resultado a retornar:", JSON.stringify(resultado).substring(0, 100));
-    return resultado;
   } catch (error) {
-    console.log("ERROR capturado:", error);
     return {
       status: "error",
       message: `Error al obtener datos del checklist: ${error}`,
@@ -727,11 +760,20 @@ function saveChecklistData(spreadsheetId: string, data: Record<string, unknown>)
     const ss = SpreadsheetApp.openById(spreadsheetId);
     const sheet = ss.getSheets()[0];
 
-    // Update rows based on provided data
-    const rows = data.rows as unknown[][];
-    for (let i = 0; i < rows.length; i++) {
-      sheet.getRange(i + 2, 1, 1, rows[i].length).setValues([rows[i]]);
-    }
+    const phases = data.phases as unknown[];
+
+    // Actualizar datos de cada fase
+    phases.forEach((phase: unknown) => {
+      const phaseData = phase as Record<string, unknown>;
+      const startRow = (phaseData.startRow as number) + 1; // +1 para el encabezado de fase, +1 para convertir a 1-indexed
+      const rows = phaseData.rows as unknown[][];
+
+      // Actualizar filas de datos
+      rows.forEach((row, rowIdx) => {
+        const targetRow = startRow + 1 + rowIdx; // +1 para headers
+        sheet.getRange(targetRow, 1, 1, (row as unknown[]).length).setValues([row]);
+      });
+    });
 
     return {
       status: "ok",

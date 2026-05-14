@@ -1177,20 +1177,15 @@
               return;
             }
 
-            console.log("Frontend - Llamando API con spreadsheetId:", spreadsheetId);
             const result = await API.getChecklistData(spreadsheetId);
-            console.log("Frontend - Resultado recibido:", result);
-            console.log("Frontend - Tipo de resultado:", typeof result);
 
             if (!result) {
-              alert("Error: No se obtuvieron datos del checklist. result es null/undefined. ID usado: " + spreadsheetId);
+              alert("Error: No se obtuvieron datos del checklist. ID usado: " + spreadsheetId);
               return;
             }
-            console.log("Frontend - result.status:", result.status);
+
             if (result.status === "ok") {
-              console.log("Frontend - Headers:", result.headers);
-              console.log("Frontend - Rows count:", result.rows ? result.rows.length : "null");
-              State.currentEditingChecklist = { id: spreadsheetId, spreadsheetId, headers: result.headers, rows: result.rows };
+              State.currentEditingChecklist = { id: spreadsheetId, spreadsheetId, phases: result.phases };
               this.renderEditor();
             } else {
               alert("Error: " + result.message + " (ID: " + spreadsheetId + ")");
@@ -1206,29 +1201,48 @@
 
           mainContent.innerHTML = `
             <h2 class="page-title">Editar Checklist</h2>
-            <div class="table-wrapper" style="overflow-x: auto;">
-              <table id="checklistTable">
-                <thead>
-                  <tr>
-                    ${checklist.headers.map((header, idx) => `<th>${header}</th>`).join("")}
-                  </tr>
-                </thead>
-                <tbody>
-                  ${checklist.rows
-                    .map(
-                      (row, rowIdx) => `
-                    <tr>
-                      ${row.map((cell, cellIdx) => {
-                        const isReadonly = cellIdx < 4;
-                        return `<td><input type="text" value="${cell}" data-row="${rowIdx}" data-col="${cellIdx}" ${isReadonly ? "readonly style='background: var(--gray-light);'" : ""} /></td>`;
-                      }).join("")}
-                    </tr>
-                  `,
-                    )
-                    .join("")}
-                </tbody>
-              </table>
+            <div class="button-group" style="margin-bottom: 20px;">
+              <button type="button" onclick="Checklists.save()">Guardar Cambios</button>
+              <button type="button" class="secondary" onclick="Router.navigate('my-checklists')">Volver</button>
             </div>
+            ${checklist.phases
+              .map(
+                (phase) => `
+              <div style="margin-bottom: 30px;">
+                <h3 style="background: ${phase.color}; color: white; padding: 10px; margin-bottom: 0; border-radius: 4px 4px 0 0;">
+                  ${phase.name}
+                </h3>
+                <div class="table-wrapper" style="overflow-x: auto;">
+                  <table class="phase-table" data-phase="${phase.name}">
+                    <thead>
+                      <tr>
+                        ${phase.headers.map((header) => `<th>${header}</th>`).join("")}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${phase.rows
+                        .map(
+                          (row, rowIdx) => `
+                        <tr>
+                          ${row
+                            .map(
+                              (cell, cellIdx) => {
+                                const isReadonly = cellIdx < 5;
+                                return `<td><input type="text" value="${cell}" data-phase="${phase.name}" data-row="${rowIdx}" data-col="${cellIdx}" ${isReadonly ? "readonly style='background: var(--gray-light);'" : ""} /></td>`;
+                              }
+                            )
+                            .join("")}
+                        </tr>
+                      `,
+                        )
+                        .join("")}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            `
+              )
+              .join("")}
             <div class="button-group">
               <button type="button" onclick="Checklists.save()">Guardar Cambios</button>
               <button type="button" class="secondary" onclick="Router.navigate('my-checklists')">Volver</button>
@@ -1237,20 +1251,34 @@
         },
 
         async save() {
-          const inputs = document.querySelectorAll("#checklistTable input");
-          const rows = [];
+          const inputs = document.querySelectorAll(".phase-table input");
+          const phases = [];
 
-          inputs.forEach((input) => {
-            const rowIdx = parseInt(input.dataset.row);
-            const colIdx = parseInt(input.dataset.col);
-            const value = input.value;
+          // Recopilar datos por fase
+          State.currentEditingChecklist.phases.forEach((phase) => {
+            const phaseInputs = document.querySelectorAll(`input[data-phase="${phase.name}"]`);
+            const phaseRows = [];
 
-            if (!rows[rowIdx]) rows[rowIdx] = [];
-            rows[rowIdx][colIdx] = value;
+            phaseInputs.forEach((input) => {
+              const rowIdx = parseInt(input.dataset.row);
+              const colIdx = parseInt(input.dataset.col);
+              const value = input.value;
+
+              if (!phaseRows[rowIdx]) phaseRows[rowIdx] = [];
+              phaseRows[rowIdx][colIdx] = value;
+            });
+
+            if (phaseRows.length > 0) {
+              phases.push({
+                name: phase.name,
+                startRow: phase.startRow,
+                rows: phaseRows,
+              });
+            }
           });
 
           try {
-            const result = await API.saveChecklistData(State.currentEditingChecklist.spreadsheetId, { rows });
+            const result = await API.saveChecklistData(State.currentEditingChecklist.spreadsheetId, { phases });
             if (result.status === "ok") {
               alert("Checklist guardado exitosamente");
               await Router.navigate("my-checklists");
