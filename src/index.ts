@@ -510,19 +510,16 @@ function createChecklist(
     newSheet.appendRow(["Version", "", ""]);
     newSheet.appendRow(["V01", "PERÚ", ""]);
 
-    // Línea 5: Empty row
-    newSheet.appendRow(["", "", "", "", "", "", "", "", "", "", ""]);
-
-    // Línea 6: Version label
+    // Línea 5: Version label
     newSheet.appendRow(["Version", "", "", "", "", "", "", "", "", "", ""]);
 
-    // Línea 7: Version value
+    // Línea 6: Version value
     newSheet.appendRow(["V01", "PERÚ", "", "", "", "", "", "", "", "", ""]);
 
-    // Línea 8: Empty row
+    // Línea 7: Empty row
     newSheet.appendRow(["", "", "", "", "", "", "", "", "", "", ""]);
 
-    // Línea 9: Empty row
+    // Línea 8: Empty row
     newSheet.appendRow(["", "", "", "", "", "", "", "", "", "", ""]);
 
     // Línea 10: Table headers (UNA SOLA VEZ)
@@ -584,9 +581,11 @@ function createChecklist(
       // Encabezado de fase: "N,,,FASE-NAME"
       newSheet.appendRow([phase.phaseNumber, "", "", phase.name, "", "", "", "", "", "", ""]);
 
-      // Datos de la fase
+      // Datos de la fase con numeración correcta (1.1, 1.2, etc.)
       const phaseSteps = stepsByPhase[phase.key] || [];
-      phaseSteps.forEach((stepRow) => {
+      phaseSteps.forEach((stepRow, stepIdx) => {
+        // Renumerar: 1.1, 1.2, 1.3... para PRE, 2.1, 2.2... para INTERVENCIÓN, etc.
+        stepRow[0] = `${phase.phaseNumber}.${stepIdx + 1}`;
         newSheet.appendRow(stepRow);
       });
 
