@@ -118,6 +118,9 @@ function processRequest(data: Record<string, unknown>): Record<string, unknown> 
         data.templateId as string,
         data.fechaInicio as string,
         data.fechaFin as string,
+        data.tipoChangio as string,
+        data.level as string,
+        data.freezing as string,
       );
     case "getOperatorChecklists":
       return getOperatorChecklists();
@@ -420,6 +423,9 @@ function createChecklist(
   templateId: string,
   fechaInicio: string,
   fechaFin: string,
+  tipoChangio: string,
+  level: string,
+  freezing: string,
 ): Record<string, unknown> {
   try {
     if (!SHEETS_IDS.PASOS_CBAS || !SHEETS_IDS.METADATOS || !SHEETS_IDS.CBAS_NETWORKING) {
@@ -477,15 +483,15 @@ function createChecklist(
       crq,
       "",
       `${cbaCode} ${cbaName}`,
-      "Normal",
+      tipoChangio,
       fechaInicio,
       fechaFin,
-      "NO",
+      freezing,
     ]);
 
     // Línea 4: Additional info
     newSheet.appendRow([
-      "L3",
+      level,
       "CookBook y/o FT",
       "",
       cbaName,
