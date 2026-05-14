@@ -560,7 +560,7 @@ function createChecklist(
       const stepRow = [
         String(row[2]), // Sec.
         String(row[3]), // Tipo
-        String(row[4]), // Ámbito
+        "PERÚ", // Ámbito (siempre PERÚ)
         String(row[5]), // Descripción
         "", // Equipo Técnico
         fechaInicio, // Inicio Previsto
