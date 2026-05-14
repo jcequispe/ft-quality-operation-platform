@@ -503,12 +503,9 @@ function createChecklist(
       "NA",
     ]);
 
-    // Línea 5: Empty row
-    newSheet.appendRow(["", "", "", "", "", "", "", ""]);
-
-    // Línea 6-7: Version info
-    newSheet.appendRow(["Version", "", ""]);
-    newSheet.appendRow(["V01", "PERÚ", ""]);
+    // Fusionar celdas C3:D3 y C4:D4
+    newSheet.getRange(3, 3, 1, 2).merge();
+    newSheet.getRange(4, 3, 1, 2).merge();
 
     // Línea 5: Version label
     newSheet.appendRow(["Version", "", "", "", "", "", "", "", "", "", ""]);
@@ -946,7 +943,7 @@ function deleteChecklist(spreadsheetId: string): Record<string, unknown> {
     // Delete the spreadsheet from Google Drive
     try {
       const file = DriveApp.getFileById(spreadsheetId);
-      DriveApp.getRootFolder().removeFile(file);
+      file.setTrashed(true);
     } catch (driveError) {
       console.log("Aviso: No se pudo eliminar el spreadsheet: " + driveError);
     }
