@@ -508,24 +508,45 @@ function createChecklist(
     newSheet.appendRow(["Version", "", ""]);
     newSheet.appendRow(["V01", "PERÚ", ""]);
 
-    // Línea 9: Add template steps with headers
-    newSheet.appendRow([
+    // Línea 8: Empty row
+    newSheet.appendRow(["", "", "", "", "", "", "", "", "", "", ""]);
+
+    // Fases para organizar los pasos
+    const phases = [
+      { name: "PRE-INTERVENCIÓN", key: "preIntervention", color: "#d32f2f" },
+      { name: "INTERVENCIÓN", key: "intervention", color: "#1a73e8" },
+      { name: "POST-INTERVENCIÓN", key: "postIntervention", color: "#4caf50" },
+      { name: "RETORNO", key: "return", color: "#999" },
+    ];
+
+    // Headers para cada tabla
+    const tableHeaders = [
       "Sec.",
-      "Tipo",
+      "Tipo de tarea",
       "Ámbito",
-      "Descripción",
+      "Descripción tarea",
       "Equipo Técnico",
       "Inicio Previsto",
       "Fin Previsto",
       "Inicio Real",
       "Fin Real",
-      "Nombre Técnico",
+      "Nombre del Técnico",
       "Resultado",
-    ]);
+    ];
 
-    // Add template data
+    let currentRow = 9;
+
+    // Agrupar pasos por fase
+    const stepsByPhase: Record<string, unknown[][]> = {
+      preIntervention: [],
+      intervention: [],
+      postIntervention: [],
+      return: [],
+    };
+
     templateSteps.forEach((row) => {
-      const newRow = [
+      const fase = String(row[1]).toLowerCase().replace(/-/g, "").replace(/intervención/g, "intervention");
+      const stepRow = [
         String(row[2]), // Sec.
         String(row[3]), // Tipo
         String(row[4]), // Ámbito
@@ -538,7 +559,35 @@ function createChecklist(
         "", // Nombre Técnico
         "", // Resultado
       ];
-      newSheet.appendRow(newRow);
+
+      if (fase.includes("pre")) stepsByPhase.preIntervention.push(stepRow);
+      else if (fase.includes("intervention") && !fase.includes("post")) stepsByPhase.intervention.push(stepRow);
+      else if (fase.includes("post")) stepsByPhase.postIntervention.push(stepRow);
+      else if (fase.includes("retorno")) stepsByPhase.return.push(stepRow);
+    });
+
+    // Insertar cada fase con sus datos
+    phases.forEach((phase) => {
+      // Encabezado de fase
+      newSheet.appendRow([phase.name]);
+      currentRow++;
+
+      // Headers de columnas
+      newSheet.appendRow(tableHeaders);
+      currentRow++;
+
+      // Datos de la fase
+      const phaseSteps = stepsByPhase[phase.key] || [];
+      if (phaseSteps.length === 0) {
+        // Si no hay pasos, insertar una fila vacía
+        newSheet.appendRow(["", "", "", "", "", "", "", "", "", "", ""]);
+        currentRow++;
+      } else {
+        phaseSteps.forEach((stepRow) => {
+          newSheet.appendRow(stepRow);
+          currentRow++;
+        });
+      }
     });
 
     // Save metadata
