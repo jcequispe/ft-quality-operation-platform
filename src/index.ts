@@ -511,15 +511,10 @@ function createChecklist(
     // Línea 8: Empty row
     newSheet.appendRow(["", "", "", "", "", "", "", "", "", "", ""]);
 
-    // Fases para organizar los pasos
-    const phases = [
-      { name: "PRE-INTERVENCIÓN", key: "preIntervention", color: "#d32f2f" },
-      { name: "INTERVENCIÓN", key: "intervention", color: "#1a73e8" },
-      { name: "POST-INTERVENCIÓN", key: "postIntervention", color: "#4caf50" },
-      { name: "RETORNO", key: "return", color: "#999" },
-    ];
+    // Línea 9: Empty row
+    newSheet.appendRow(["", "", "", "", "", "", "", "", "", "", ""]);
 
-    // Headers para cada tabla
+    // Línea 10: Table headers (UNA SOLA VEZ)
     const tableHeaders = [
       "Sec.",
       "Tipo de tarea",
@@ -533,8 +528,15 @@ function createChecklist(
       "Nombre del Técnico",
       "Resultado",
     ];
+    newSheet.appendRow(tableHeaders);
 
-    let currentRow = 9;
+    // Fases para organizar los pasos
+    const phases = [
+      { name: "PRE-INTERVENCIÓN", key: "preIntervention", phaseNumber: 1 },
+      { name: "INTERVENCIÓN", key: "intervention", phaseNumber: 2 },
+      { name: "POST-INTERVENCIÓN", key: "postIntervention", phaseNumber: 3 },
+      { name: "RETORNO", key: "return", phaseNumber: 4 },
+    ];
 
     // Agrupar pasos por fase
     const stepsByPhase: Record<string, unknown[][]> = {
@@ -566,27 +568,20 @@ function createChecklist(
       else if (fase.includes("retorno")) stepsByPhase.return.push(stepRow);
     });
 
-    // Insertar cada fase con sus datos
-    phases.forEach((phase) => {
-      // Encabezado de fase
-      newSheet.appendRow([phase.name]);
-      currentRow++;
-
-      // Headers de columnas
-      newSheet.appendRow(tableHeaders);
-      currentRow++;
+    // Insertar datos de cada fase
+    phases.forEach((phase, phaseIdx) => {
+      // Encabezado de fase: "N,,,FASE-NAME"
+      newSheet.appendRow([phase.phaseNumber, "", "", phase.name, "", "", "", "", "", "", ""]);
 
       // Datos de la fase
       const phaseSteps = stepsByPhase[phase.key] || [];
-      if (phaseSteps.length === 0) {
-        // Si no hay pasos, insertar una fila vacía
+      phaseSteps.forEach((stepRow) => {
+        newSheet.appendRow(stepRow);
+      });
+
+      // Línea vacía entre fases (excepto después de la última)
+      if (phaseIdx < phases.length - 1) {
         newSheet.appendRow(["", "", "", "", "", "", "", "", "", "", ""]);
-        currentRow++;
-      } else {
-        phaseSteps.forEach((stepRow) => {
-          newSheet.appendRow(stepRow);
-          currentRow++;
-        });
       }
     });
 
@@ -684,53 +679,58 @@ function getChecklistData(spreadsheetId: string): Record<string, unknown> {
     const sheet = ss.getSheets()[0];
     const data = sheet.getDataRange().getValues() as unknown[][];
 
-    const phases = [
-      { name: "PRE-INTERVENCIÓN", color: "#d32f2f" },
-      { name: "INTERVENCIÓN", color: "#1a73e8" },
-      { name: "POST-INTERVENCIÓN", color: "#4caf50" },
-      { name: "RETORNO", color: "#999" },
+    // Línea 10 (índice 9) contiene los headers de la tabla
+    const tableHeaders = data[9] ? data[9].map((h) => String(h || "")) : [];
+
+    const phaseDefinitions = [
+      { name: "PRE-INTERVENCIÓN", color: "#d32f2f", phaseNumber: 1 },
+      { name: "INTERVENCIÓN", color: "#1a73e8", phaseNumber: 2 },
+      { name: "POST-INTERVENCIÓN", color: "#4caf50", phaseNumber: 3 },
+      { name: "RETORNO", color: "#999", phaseNumber: 4 },
     ];
 
     const parsedPhases: Record<string, unknown>[] = [];
-    let i = 8; // Comienza en línea 9 (índice 8)
+    let i = 10; // Comienza en línea 11 (índice 10)
 
-    for (const phase of phases) {
+    for (const phaseDef of phaseDefinitions) {
       if (i >= data.length) break;
 
-      // Encontrar encabezado de fase
-      if (String(data[i][0]).trim() !== phase.name) {
-        break;
-      }
+      // Buscar encabezado de fase: "N,,,FASE-NAME"
+      while (i < data.length) {
+        const firstCell = String(data[i][0] || "").trim();
+        const fourthCell = String(data[i][3] || "").trim();
 
-      const phaseData = {
-        name: phase.name,
-        color: phase.color,
-        startRow: i + 1, // Número de fila (1-indexed)
-        headers: [],
-        rows: [],
-      };
-
-      i++; // Siguiente fila (headers)
-
-      // Obtener headers de columna
-      if (i < data.length) {
-        phaseData.headers = data[i].map((h) => String(h || ""));
+        if (firstCell === String(phaseDef.phaseNumber) && fourthCell === phaseDef.name) {
+          break;
+        }
         i++;
       }
 
-      // Obtener filas de datos hasta encontrar la siguiente fase o fin
+      if (i >= data.length) break;
+
+      const phaseData = {
+        name: phaseDef.name,
+        color: phaseDef.color,
+        startRow: i + 1, // Número de fila (1-indexed)
+        headers: tableHeaders,
+        rows: [],
+      };
+
+      i++; // Siguiente fila (datos)
+
+      // Obtener filas de datos hasta encontrar la siguiente fase, fila vacía, o fin
       while (i < data.length) {
         const firstCell = String(data[i][0] || "").trim();
 
-        // Si encuentra otra fase, detener
-        if (phases.some((p) => firstCell === p.name)) {
+        // Si encuentra otra fase (número al inicio), detener
+        if (phaseDefinitions.some((p) => firstCell === String(p.phaseNumber) && String(data[i][3] || "").trim() === p.name)) {
           break;
         }
 
-        // Si la fila está completamente vacía, puede ser fin de la fase
+        // Si la fila está completamente vacía, fin de la fase
         const rowHasData = data[i].some((cell) => cell !== null && cell !== undefined && String(cell).trim() !== "");
-        if (!rowHasData && i > 10) {
-          // Permitir algunas filas vacías al inicio, pero parar si está completamente vacía después de línea 10
+        if (!rowHasData) {
+          i++;
           break;
         }
 
