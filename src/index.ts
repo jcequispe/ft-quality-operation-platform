@@ -62,6 +62,32 @@ interface CBA {
   };
 }
 
+interface CBANew {
+  id?: string;
+  codigoArea: string;
+  areaTecnica: string;
+  nombreTipologia: string;
+  gestionDelCambio: string;
+  nombreCBA: string;
+  candidataL04: string;
+  candidataL05: string;
+  madurez: string;
+  letraCBA: string;
+  numeroCookbok: string;
+  urlCBA: string;
+  codificacionTipologia: string;
+  secuencia: number;
+  tituloCatalogo: string;
+  fechaIncorporacion: string;
+  personaQO: string;
+  estado?: string;
+}
+
+interface Area {
+  codigo: string;
+  nombre: string;
+}
+
 interface Checklist {
   id: string;
   crq: string;
@@ -107,11 +133,21 @@ function processRequest(data: Record<string, unknown>): Record<string, unknown> 
     case "getCBASteps":
       return getCBASteps(data.cbaId as string);
     case "createCBA":
-      return createCBA(data as unknown as CBA);
+      return createCBA(data as unknown as CBANew);
+    case "updateCBA":
+      return updateCBA(data.id as string, data as unknown as CBANew);
     case "saveCBASteps":
       return saveCBASteps(data.cbaId as string, data.pasos as unknown as Record<string, CBAStep[]>);
     case "deleteCBA":
       return deleteCBA(data.cbaId as string);
+    case "getAreas":
+      return getAreas();
+    case "createArea":
+      return createArea(data.codigo as string, data.nombre as string);
+    case "updateArea":
+      return updateArea(data.codigoAnterior as string, data.codigo as string, data.nombre as string);
+    case "deleteArea":
+      return deleteArea(data.codigo as string);
     case "createChecklist":
       return createChecklist(
         data.crq as string,
@@ -197,6 +233,192 @@ function getCurrentUser(): Record<string, unknown> {
     return {
       status: "error",
       message: `Error al obtener usuario: ${error}`,
+    };
+  }
+}
+
+/** Check if user is ADMIN */
+function isAdminUser(email: string): boolean {
+  try {
+    if (!SHEETS_IDS.USUARIOS) {
+      loadSheetIds();
+    }
+
+    const ss = SpreadsheetApp.openById(SHEETS_IDS.USUARIOS);
+    const sheet = ss.getSheets()[0];
+    const data = sheet.getDataRange().getValues() as unknown[][];
+
+    for (let i = 1; i < data.length; i++) {
+      const userEmail = String(data[i][0]).toLowerCase();
+      if (userEmail === email.toLowerCase()) {
+        const rol = String(data[i][2]);
+        return rol === "ADMIN";
+      }
+    }
+    return false;
+  } catch (error) {
+    console.log("Error al verificar rol ADMIN: " + error);
+    return false;
+  }
+}
+
+/** Get all areas */
+function getAreas(): Record<string, unknown> {
+  try {
+    if (!SHEETS_IDS.AREAS) {
+      loadSheetIds();
+    }
+
+    if (!SHEETS_IDS.AREAS) {
+      return {
+        status: "error",
+        message: "Tabla AREAS no configurada en el maestro",
+      };
+    }
+
+    const ss = SpreadsheetApp.openById(SHEETS_IDS.AREAS);
+    const sheet = ss.getSheets()[0];
+    const data = sheet.getDataRange().getValues() as unknown[][];
+
+    const areas: Area[] = [];
+    for (let i = 1; i < data.length; i++) {
+      const codigo = String(data[i][0]).trim();
+      const nombre = String(data[i][1]).trim();
+      if (codigo && nombre) {
+        areas.push({ codigo, nombre });
+      }
+    }
+
+    return {
+      status: "ok",
+      areas,
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message: `Error al obtener áreas: ${error}`,
+    };
+  }
+}
+
+/** Create new area */
+function createArea(codigo: string, nombre: string): Record<string, unknown> {
+  try {
+    const currentEmail = "jcequispe@gmail.com";
+    if (!isAdminUser(currentEmail)) {
+      return {
+        status: "error",
+        message: "Solo administradores pueden crear áreas",
+      };
+    }
+
+    if (!SHEETS_IDS.AREAS) {
+      loadSheetIds();
+    }
+
+    if (!SHEETS_IDS.AREAS) {
+      return {
+        status: "error",
+        message: "Tabla AREAS no configurada",
+      };
+    }
+
+    const ss = SpreadsheetApp.openById(SHEETS_IDS.AREAS);
+    const sheet = ss.getSheets()[0];
+
+    sheet.appendRow([codigo, nombre]);
+
+    return {
+      status: "ok",
+      message: "Área creada exitosamente",
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message: `Error al crear área: ${error}`,
+    };
+  }
+}
+
+/** Update area */
+function updateArea(codigoAnterior: string, codigo: string, nombre: string): Record<string, unknown> {
+  try {
+    const currentEmail = "jcequispe@gmail.com";
+    if (!isAdminUser(currentEmail)) {
+      return {
+        status: "error",
+        message: "Solo administradores pueden editar áreas",
+      };
+    }
+
+    if (!SHEETS_IDS.AREAS) {
+      loadSheetIds();
+    }
+
+    const ss = SpreadsheetApp.openById(SHEETS_IDS.AREAS);
+    const sheet = ss.getSheets()[0];
+    const data = sheet.getDataRange().getValues() as unknown[][];
+
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === codigoAnterior) {
+        sheet.getRange(i + 1, 1).setValue(codigo);
+        sheet.getRange(i + 1, 2).setValue(nombre);
+        return {
+          status: "ok",
+          message: "Área actualizada exitosamente",
+        };
+      }
+    }
+
+    return {
+      status: "error",
+      message: "Área no encontrada",
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message: `Error al actualizar área: ${error}`,
+    };
+  }
+}
+
+/** Delete area */
+function deleteArea(codigo: string): Record<string, unknown> {
+  try {
+    const currentEmail = "jcequispe@gmail.com";
+    if (!isAdminUser(currentEmail)) {
+      return {
+        status: "error",
+        message: "Solo administradores pueden eliminar áreas",
+      };
+    }
+
+    if (!SHEETS_IDS.AREAS) {
+      loadSheetIds();
+    }
+
+    const ss = SpreadsheetApp.openById(SHEETS_IDS.AREAS);
+    const sheet = ss.getSheets()[0];
+    const data = sheet.getDataRange().getValues() as unknown[][];
+
+    for (let i = data.length - 1; i >= 1; i--) {
+      if (String(data[i][0]) === codigo) {
+        sheet.deleteRow(i + 1);
+        return {
+          status: "ok",
+          message: "Área eliminada exitosamente",
+        };
+      }
+    }
+
+    return {
+      status: "error",
+      message: "Área no encontrada",
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message: `Error al eliminar área: ${error}`,
     };
   }
 }
@@ -288,24 +510,47 @@ function getCBASteps(cbaId: string): Record<string, unknown> {
   }
 }
 
-/** Create new CBA in Google Sheet. */
-function createCBA(cba: CBA): Record<string, unknown> {
+/** Create new CBA in Google Sheet */
+function createCBA(cba: CBANew): Record<string, unknown> {
   try {
+    const currentEmail = "jcequispe@gmail.com";
+    if (!isAdminUser(currentEmail)) {
+      return {
+        status: "error",
+        message: "Solo administradores pueden crear CBAs",
+      };
+    }
+
     if (!SHEETS_IDS.CBAS_NETWORKING) {
       loadSheetIds();
     }
+
     const ss = SpreadsheetApp.openById(SHEETS_IDS.CBAS_NETWORKING);
     const sheet = ss.getSheets()[0];
 
+    const id = `CBA-${String(Date.now()).slice(-8)}`;
+    const estado = "Pasos pendientes";
+
     const newRow = [
-      cba.id,
-      cba.codigo,
-      cba.nombre,
-      cba.categoria,
-      cba.descripcion,
-      "Pasos pendientes",
+      id,
+      cba.codigoArea,
+      cba.areaTecnica,
+      cba.nombreTipologia,
+      cba.gestionDelCambio,
+      cba.nombreCBA,
+      cba.candidataL04,
+      cba.candidataL05,
+      cba.madurez,
+      cba.letraCBA,
+      cba.numeroCookbok,
+      cba.urlCBA,
+      cba.codificacionTipologia,
+      cba.secuencia,
+      cba.tituloCatalogo,
+      cba.fechaIncorporacion,
+      cba.personaQO,
+      estado,
       new Date().toISOString().split("T")[0],
-      cba.responsable,
     ];
 
     sheet.appendRow(newRow);
@@ -313,12 +558,78 @@ function createCBA(cba: CBA): Record<string, unknown> {
     return {
       status: "ok",
       message: "CBA creada exitosamente",
+      id,
       cba,
     };
   } catch (error) {
     return {
       status: "error",
       message: `Error al crear CBA: ${error}`,
+    };
+  }
+}
+
+/** Update existing CBA */
+function updateCBA(id: string, cba: CBANew): Record<string, unknown> {
+  try {
+    const currentEmail = "jcequispe@gmail.com";
+    if (!isAdminUser(currentEmail)) {
+      return {
+        status: "error",
+        message: "Solo administradores pueden editar CBAs",
+      };
+    }
+
+    if (!SHEETS_IDS.CBAS_NETWORKING) {
+      loadSheetIds();
+    }
+
+    const ss = SpreadsheetApp.openById(SHEETS_IDS.CBAS_NETWORKING);
+    const sheet = ss.getSheets()[0];
+    const data = sheet.getDataRange().getValues() as unknown[][];
+
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === id) {
+        const updateRow = [
+          id,
+          cba.codigoArea,
+          cba.areaTecnica,
+          cba.nombreTipologia,
+          cba.gestionDelCambio,
+          cba.nombreCBA,
+          cba.candidataL04,
+          cba.candidataL05,
+          cba.madurez,
+          cba.letraCBA,
+          cba.numeroCookbok,
+          cba.urlCBA,
+          cba.codificacionTipologia,
+          cba.secuencia,
+          cba.tituloCatalogo,
+          cba.fechaIncorporacion,
+          cba.personaQO,
+          data[i][17],
+          data[i][18],
+        ];
+
+        sheet.getRange(i + 1, 1, 1, updateRow.length).setValues([updateRow]);
+
+        return {
+          status: "ok",
+          message: "CBA actualizada exitosamente",
+          id,
+        };
+      }
+    }
+
+    return {
+      status: "error",
+      message: "CBA no encontrada",
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message: `Error al actualizar CBA: ${error}`,
     };
   }
 }

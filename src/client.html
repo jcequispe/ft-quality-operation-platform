@@ -453,6 +453,29 @@
         </div>
       </div>
 
+      <div id="areaModal" class="modal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2 id="areaModalTitle">Agregar Área</h2>
+            <button class="close-btn" onclick="UI.closeAreaModal()">×</button>
+          </div>
+          <form id="areaForm" class="form-section">
+            <div class="form-group">
+              <label for="areaCodigo">Código *</label>
+              <input type="text" id="areaCodigo" placeholder="01, 02, 03..." maxlength="2" required />
+            </div>
+            <div class="form-group">
+              <label for="areaNombre">Nombre *</label>
+              <input type="text" id="areaNombre" placeholder="ej: Networking" required />
+            </div>
+            <div class="button-group">
+              <button type="submit">Guardar Área</button>
+              <button type="button" class="secondary" onclick="UI.closeAreaModal()">Cancelar</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
       <div id="userModal" class="modal">
         <div class="modal-content">
           <div class="modal-header">
@@ -603,6 +626,26 @@
         async deleteChecklist(spreadsheetId) {
           return this.call("deleteChecklist", { spreadsheetId });
         },
+
+        async getAreas() {
+          return this.call("getAreas");
+        },
+
+        async createArea(codigo, nombre) {
+          return this.call("createArea", { codigo, nombre });
+        },
+
+        async updateArea(codigoAnterior, codigo, nombre) {
+          return this.call("updateArea", { codigoAnterior, codigo, nombre });
+        },
+
+        async deleteArea(codigo) {
+          return this.call("deleteArea", { codigo });
+        },
+
+        async updateCBA(id, cba) {
+          return this.call("updateCBA", { id, ...cba });
+        },
       };
 
       // ==================== UTILIDADES UI ====================
@@ -682,6 +725,32 @@
           document.getElementById("userModal").classList.remove("active");
           document.getElementById("userForm").reset();
         },
+
+        openAreaModal(isEdit = false, codigo = null, nombre = null) {
+          const title = isEdit ? `Editar Área - ${codigo}` : "Agregar Área";
+          document.getElementById("areaModalTitle").textContent = title;
+
+          const form = document.getElementById("areaForm");
+          form.onsubmit = Areas.save;
+
+          if (isEdit && codigo) {
+            document.getElementById("areaCodigo").value = codigo;
+            document.getElementById("areaCodigo").readOnly = true;
+            document.getElementById("areaNombre").value = nombre;
+            Areas.currentEditing = { codigo, nombre };
+          } else {
+            form.reset();
+            document.getElementById("areaCodigo").readOnly = false;
+            Areas.currentEditing = null;
+          }
+
+          document.getElementById("areaModal").classList.add("active");
+        },
+
+        closeAreaModal() {
+          document.getElementById("areaModal").classList.remove("active");
+          document.getElementById("areaForm").reset();
+        },
       };
 
       // ==================== COMPONENTE: SIDEBAR ====================
@@ -713,12 +782,13 @@
         getMenuForRole(rol) {
           const menus = {
             ADMIN: [
-              { view: "all-cbas", label: "Todas las CBAs", icon: "📋" },
+              { view: "create-cba", label: "Crear CBA", icon: "➕" },
+              { view: "my-cbas", label: "Mis CBAs", icon: "📋" },
+              { view: "manage-areas", label: "Gestionar Áreas", icon: "🏢" },
               { view: "users", label: "Usuarios", icon: "👥" },
             ],
             "LIDER-TEAM": [
               { view: "my-cbas", label: "Mis CBAs", icon: "📋" },
-              { view: "create-cba", label: "Crear CBA", icon: "➕" },
             ],
             OPERADOR: [
               { view: "create-checklist", label: "Nuevo Checklist", icon: "✅" },
@@ -740,7 +810,10 @@
                 await this.renderMyCBAs();
                 break;
               case "create-cba":
-                this.renderCreateCBA();
+                await this.renderCreateCBA();
+                break;
+              case "manage-areas":
+                await this.renderManageAreas();
                 break;
               case "all-cbas":
                 await this.renderAllCBAs();
@@ -765,12 +838,14 @@
         async renderMyCBAs() {
           const cbas = State.getCBAs();
           const mainContent = document.getElementById("mainContent");
+          const user = State.getCurrentUser();
+          const isAdmin = user.rol === "ADMIN";
 
           mainContent.innerHTML = `
-            <h2 class="page-title">Mis CBAs</h2>
+            <h2 class="page-title">${isAdmin ? "Mis CBAs (ADMIN)" : "Mis CBAs"}</h2>
             ${cbas.length === 0 ? `
               <div class="empty-state">
-                <p>No hay CBAs creadas aún</p>
+                <p>No hay CBAs</p>
               </div>
             ` : `
               <div class="table-wrapper">
@@ -778,9 +853,10 @@
                   <thead>
                     <tr>
                       <th>ID</th>
-                      <th>Código</th>
-                      <th>Nombre</th>
-                      <th>Categoría</th>
+                      <th>Área</th>
+                      <th>Nombre CBA</th>
+                      <th>Tipología</th>
+                      <th>Madurez</th>
                       <th>Estado</th>
                       <th>Acciones</th>
                     </tr>
@@ -789,17 +865,24 @@
                     ${cbas.map((cba) => `
                       <tr>
                         <td>${cba.id}</td>
-                        <td><strong>${cba.codigo}</strong></td>
-                        <td>${cba.nombre}</td>
-                        <td>${cba.categoria}</td>
+                        <td>${cba.areaTecnica || cba.area || "N/A"}</td>
+                        <td><strong>${cba.nombreCBA || cba.nombre || "-"}</strong></td>
+                        <td>${cba.nombreTipologia || cba.categoria || "-"}</td>
+                        <td>${cba.madurez || "-"}</td>
                         <td>
-                          <span class="status-badge ${cba.estado.includes("pendientes") ? "status-pending" : "status-defined"}">
-                            ${cba.estado}
+                          <span class="status-badge ${cba.estado && cba.estado.includes("pendientes") ? "status-pending" : "status-defined"}">
+                            ${cba.estado || "Pendiente"}
                           </span>
                         </td>
                         <td>
-                          <button class="action-btn" onclick="StepsEditor.open('${cba.id}')">Editar Pasos</button>
-                          <button class="action-btn secondary" onclick="CBAs.delete('${cba.id}')">Eliminar</button>
+                          ${isAdmin ? `
+                            <button class="action-btn" onclick="Content.renderCreateCBA('${cba.id}')">Editar</button>
+                          ` : `
+                            <button class="action-btn" onclick="StepsEditor.open('${cba.id}')">Agregar Pasos</button>
+                          `}
+                          ${isAdmin ? `
+                            <button class="action-btn danger" onclick="CBAs.delete('${cba.id}')">Eliminar</button>
+                          ` : ""}
                         </td>
                       </tr>
                     `).join("")}
@@ -810,46 +893,203 @@
           `;
         },
 
-        renderCreateCBA() {
+        async renderCreateCBA(editId = null) {
           const mainContent = document.getElementById("mainContent");
+
+          let areas = [];
+          try {
+            const areasResult = await API.getAreas();
+            if (areasResult.status === "ok") {
+              areas = areasResult.areas;
+            }
+          } catch (error) {
+            console.log("Error al obtener áreas:", error);
+          }
+
+          const pageTitle = editId ? "Editar CBA" : "Crear Nueva CBA";
+
           mainContent.innerHTML = `
-            <h2 class="page-title">Crear Nueva CBA</h2>
+            <h2 class="page-title">${pageTitle}</h2>
             <form id="createCbaForm" class="form-section">
-              <div class="form-row">
-                <div class="form-group">
-                  <label for="cbaCodigo">Código CBA</label>
-                  <input type="text" id="cbaCodigo" placeholder="PER-N01-A-01-L03" required />
+              <!-- SECCIÓN 1: IDENTIFICACIÓN -->
+              <div style="background: #f9f9f9; padding: 15px; border-radius: 4px; margin-bottom: 25px; border-left: 4px solid var(--primary);">
+                <h3 style="color: var(--primary); margin-bottom: 15px;">1. Identificación</h3>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="cbaArea">Área Técnica *</label>
+                    <select id="cbaArea" required>
+                      <option value="">Seleccionar...</option>
+                      ${areas.map(a => `<option value="${a.codigo}">${a.nombre} (${a.codigo})</option>`).join("")}
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="cbaNombreTipologia">Nombre de la Tipología de Cambio *</label>
+                    <input type="text" id="cbaNombreTipologia" placeholder="ej: Actualización de firmware F5" required />
+                  </div>
                 </div>
+
                 <div class="form-group">
-                  <label for="cbaCategoria">Categoría</label>
-                  <select id="cbaCategoria" required>
-                    <option value="">Seleccionar...</option>
-                    <option value="Actualización de firmware">Actualización de firmware</option>
-                    <option value="Gestión de Licencias">Gestión de Licencias</option>
-                    <option value="Apagado Físico/Lógico">Apagado Físico/Lógico</option>
-                    <option value="Gestión de parámetros">Gestión de parámetros</option>
-                  </select>
+                  <label for="cbaCodificacion">Codificación de la Tipología *</label>
+                  <input type="text" id="cbaCodificacion" placeholder="ej: PER-N01-A-01-L03-Actualización de firmware" required />
                 </div>
               </div>
 
-              <div class="form-group">
-                <label for="cbaNombre">Nombre CBA</label>
-                <input type="text" id="cbaNombre" placeholder="Nombre descriptivo" required />
+              <!-- SECCIÓN 2: CONFIGURACIÓN DEL CAMBIO -->
+              <div style="background: #f9f9f9; padding: 15px; border-radius: 4px; margin-bottom: 25px; border-left: 4px solid var(--success);">
+                <h3 style="color: var(--success); margin-bottom: 15px;">2. Configuración del Cambio</h3>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="cbaGestion">Gestión del Cambio *</label>
+                    <select id="cbaGestion" required>
+                      <option value="">Seleccionar...</option>
+                      <option value="Normal">Normal</option>
+                      <option value="Fastrack">Fastrack</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="cbaMaturez">Madurez *</label>
+                    <select id="cbaMaturez" required>
+                      <option value="">Seleccionar...</option>
+                      <option value="L03">L03</option>
+                      <option value="L04">L04</option>
+                      <option value="L05">L05</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="cbaLetra">Letra de CBA *</label>
+                    <input type="text" id="cbaLetra" placeholder="ej: A, B, C..." maxlength="1" required />
+                  </div>
+                  <div class="form-group">
+                    <label for="cbaCookbok">Número de Cookbok *</label>
+                    <input type="number" id="cbaCookbok" placeholder="ej: 01" required />
+                  </div>
+                </div>
               </div>
 
-              <div class="form-group">
-                <label for="cbaDescripcion">Descripción</label>
-                <textarea id="cbaDescripcion" placeholder="Describe el propósito" required></textarea>
+              <!-- SECCIÓN 3: INFORMACIÓN DE LA CBA -->
+              <div style="background: #f9f9f9; padding: 15px; border-radius: 4px; margin-bottom: 25px; border-left: 4px solid #ff9800;">
+                <h3 style="color: #ff9800; margin-bottom: 15px;">3. Información de la CBA</h3>
+
+                <div class="form-group">
+                  <label for="cbaNombre">Nombre de la CBA *</label>
+                  <input type="text" id="cbaNombre" placeholder="ej: Actualización de firmware" required />
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="cbaSecuencia">Secuencia *</label>
+                    <input type="number" id="cbaSecuencia" placeholder="ej: 1" required />
+                  </div>
+                  <div class="form-group">
+                    <label for="cbaTitulo">Título en Catálogo *</label>
+                    <input type="text" id="cbaTitulo" placeholder="ej: PER-N01-A-Vxx Actualización de firmware" required />
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="cbaUrl">URL de la CBA</label>
+                  <input type="url" id="cbaUrl" placeholder="https://..." />
+                </div>
+              </div>
+
+              <!-- SECCIÓN 4: NIVELES Y DELEGACIÓN -->
+              <div style="background: #f9f9f9; padding: 15px; border-radius: 4px; margin-bottom: 25px; border-left: 4px solid #4caf50;">
+                <h3 style="color: #4caf50; margin-bottom: 15px;">4. Niveles y Delegación</h3>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>¿Candidata a L04? (Delegable a equipo junior) *</label>
+                    <select id="cbaL04" required>
+                      <option value="">Seleccionar...</option>
+                      <option value="SI">Sí</option>
+                      <option value="NO">No</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>¿Candidata a L05? (Automatizable) *</label>
+                    <select id="cbaL05" required>
+                      <option value="">Seleccionar...</option>
+                      <option value="SI">Sí</option>
+                      <option value="NO">No</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- SECCIÓN 5: AUDITORÍA -->
+              <div style="background: #f9f9f9; padding: 15px; border-radius: 4px; margin-bottom: 25px; border-left: 4px solid #9c27b0;">
+                <h3 style="color: #9c27b0; margin-bottom: 15px;">5. Auditoría</h3>
+
+                <div class="form-group">
+                  <label for="cbaFecha">Fecha de Incorporación en Catálogo *</label>
+                  <input type="date" id="cbaFecha" required />
+                </div>
               </div>
 
               <div class="button-group">
-                <button type="submit">Crear CBA</button>
-                <button type="reset" class="secondary">Limpiar</button>
+                <button type="submit">${editId ? "Actualizar CBA" : "Crear CBA"}</button>
+                <button type="button" class="secondary" onclick="Router.navigate('my-cbas')">Cancelar</button>
               </div>
             </form>
           `;
 
-          document.getElementById("createCbaForm").addEventListener("submit", CBAs.create);
+          document.getElementById("createCbaForm").addEventListener("submit", (e) => CBAs.save(e, editId));
+        },
+
+        async renderManageAreas() {
+          const mainContent = document.getElementById("mainContent");
+
+          try {
+            const result = await API.getAreas();
+            if (result.status === "ok") {
+              const areas = result.areas;
+              mainContent.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                  <h2 class="page-title" style="margin-bottom: 0;">Gestión de Áreas Técnicas</h2>
+                  <button onclick="Areas.openForm(false)">+ Agregar Área</button>
+                </div>
+                <p>Total: ${areas.length} áreas</p>
+                ${areas.length === 0 ? `
+                  <div class="empty-state">
+                    <p>No hay áreas registradas</p>
+                  </div>
+                ` : `
+                  <div class="table-wrapper">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Código</th>
+                          <th>Nombre</th>
+                          <th>Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        ${areas.map((area) => `
+                          <tr>
+                            <td><strong>${area.codigo}</strong></td>
+                            <td>${area.nombre}</td>
+                            <td>
+                              <button class="action-btn secondary" onclick="Areas.openForm(true, '${area.codigo}', '${area.nombre}')">Editar</button>
+                              <button class="action-btn danger" onclick="Areas.delete('${area.codigo}')">Eliminar</button>
+                            </td>
+                          </tr>
+                        `).join("")}
+                      </tbody>
+                    </table>
+                  </div>
+                `}
+              `;
+            } else {
+              mainContent.innerHTML = `<div class="auth-error"><h2>Error</h2><p>${result.message}</p></div>`;
+            }
+          } catch (error) {
+            mainContent.innerHTML = `<div class="auth-error"><h2>Error</h2><p>${error.message}</p></div>`;
+          }
         },
 
         async renderAllCBAs() {
@@ -1106,27 +1346,96 @@
         },
       };
 
-      // ==================== COMPONENTE: CBAs ====================
-      const CBAs = {
-        async create(e) {
+      // ==================== COMPONENTE: AREAS ====================
+      const Areas = {
+        currentEditing: null,
+
+        openForm(isEdit = false, codigo = null, nombre = null) {
+          UI.openAreaModal(isEdit, codigo, nombre);
+        },
+
+        async save(e) {
           e.preventDefault();
 
-          const newCBA = {
-            id: `N-${String(State.getCBAs().length + 1).padStart(2, "0")}-${Math.random().toString(36).substr(2, 2).toUpperCase()}`,
-            codigo: document.getElementById("cbaCodigo").value,
-            nombre: document.getElementById("cbaNombre").value,
-            categoria: document.getElementById("cbaCategoria").value,
-            descripcion: document.getElementById("cbaDescripcion").value,
-            responsable: State.getCurrentUser().nombre,
-            estado: "Pasos pendientes",
+          const codigo = document.getElementById("areaCodigo").value;
+          const nombre = document.getElementById("areaNombre").value;
+
+          try {
+            let result;
+            if (Areas.currentEditing) {
+              result = await API.updateArea(Areas.currentEditing.codigo, codigo, nombre);
+            } else {
+              result = await API.createArea(codigo, nombre);
+            }
+
+            if (result.status === "ok") {
+              await Content.renderManageAreas();
+              UI.closeAreaModal();
+              alert(Areas.currentEditing ? "Área actualizada" : "Área creada");
+            } else {
+              alert("Error: " + result.message);
+            }
+          } catch (error) {
+            alert("Error: " + error);
+          }
+        },
+
+        async delete(codigo) {
+          if (confirm(`¿Eliminar el área ${codigo}?`)) {
+            try {
+              const result = await API.deleteArea(codigo);
+              if (result.status === "ok") {
+                await Content.renderManageAreas();
+                alert("Área eliminada");
+              } else {
+                alert("Error: " + result.message);
+              }
+            } catch (error) {
+              alert("Error: " + error);
+            }
+          }
+        },
+      };
+
+      // ==================== COMPONENTE: CBAs ====================
+      const CBAs = {
+        currentEditingId: null,
+
+        async save(e, editId = null) {
+          e.preventDefault();
+
+          const cba = {
+            codigoArea: document.getElementById("cbaArea").value,
+            areaTecnica: document.querySelector(`#cbaArea option[value="${document.getElementById("cbaArea").value}"]`).textContent,
+            nombreTipologia: document.getElementById("cbaNombreTipologia").value,
+            gestionDelCambio: document.getElementById("cbaGestion").value,
+            nombreCBA: document.getElementById("cbaNombre").value,
+            candidataL04: document.getElementById("cbaL04").value,
+            candidataL05: document.getElementById("cbaL05").value,
+            madurez: document.getElementById("cbaMaturez").value,
+            letraCBA: document.getElementById("cbaLetra").value,
+            numeroCookbok: document.getElementById("cbaCookbok").value,
+            urlCBA: document.getElementById("cbaUrl").value,
+            codificacionTipologia: document.getElementById("cbaCodificacion").value,
+            secuencia: parseInt(document.getElementById("cbaSecuencia").value),
+            tituloCatalogo: document.getElementById("cbaTitulo").value,
+            fechaIncorporacion: document.getElementById("cbaFecha").value,
+            personaQO: State.getCurrentUser().nombre,
           };
 
           try {
-            const result = await API.createCBA(newCBA);
+            let result;
+            if (editId) {
+              result = await API.updateCBA(editId, cba);
+            } else {
+              result = await API.createCBA(cba);
+            }
+
             if (result.status === "ok") {
-              State.getCBAs().push(newCBA);
               await Router.navigate("my-cbas");
-              alert("CBA creada exitosamente");
+              alert(editId ? "CBA actualizada exitosamente" : "CBA creada exitosamente");
+            } else {
+              alert("Error: " + result.message);
             }
           } catch (error) {
             alert("Error: " + error);
