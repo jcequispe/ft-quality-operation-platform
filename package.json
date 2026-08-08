@@ -6,7 +6,14 @@
   "scripts": {
     "build": "bun run bun.build.ts",
     "push": "clasp push",
-    "deploy": "clasp push && clasp deploy"
+    "deploy": "clasp push && clasp deploy",
+    "sync": "node scripts/sync-to-sheets.js",
+    "setup": "node scripts/setup-sheets.js"
+  },
+  "dependencies": {
+    "csv-parse": "^5.5.6",
+    "dotenv": "^16.4.5",
+    "googleapis": "^118.0.0"
   },
   "devDependencies": {
     "@gas-plugin/unplugin": "latest",

@@ -595,8 +595,12 @@
           return this.call("createChecklist", { crq, templateId, fechaInicio, fechaFin, tipoChangio, level, freezing });
         },
 
-        async getOperatorChecklists() {
-          return this.call("getOperatorChecklists");
+        async getMyChecklists() {
+          return this.call("getMyChecklists");
+        },
+
+        async assignStep(checklistId, pasoSec, email) {
+          return this.call("assignStep", { checklistId, pasoSec, email });
         },
 
         async getChecklistData(spreadsheetId) {
@@ -680,8 +684,8 @@
         getTitleForRole(rol) {
           const titles = {
             ADMIN: "Administración - Todas las Áreas",
-            "LIDER-TEAM": `Gestión de CBAs - ${State.getCurrentUser().area}`,
-            OPERADOR: "Crear Checklists",
+            "LIDER-TEAM": `Gestión de CBAs y Checklists - ${State.getCurrentUser().area}`,
+            OPERADOR: "Mis Checklists Asignados",
           };
           return titles[rol] || "Plataforma de Operadores";
         },
@@ -789,9 +793,10 @@
             ],
             "LIDER-TEAM": [
               { view: "my-cbas", label: "Mis CBAs", icon: "📋" },
+              { view: "create-checklist", label: "Nuevo Checklist", icon: "✅" },
+              { view: "my-checklists", label: "Checklists y Asignaciones", icon: "📝" },
             ],
             OPERADOR: [
-              { view: "create-checklist", label: "Nuevo Checklist", icon: "✅" },
               { view: "my-checklists", label: "Mis Checklists", icon: "📝" },
             ],
           };
@@ -865,9 +870,9 @@
                     ${cbas.map((cba) => `
                       <tr>
                         <td>${cba.id}</td>
-                        <td>${cba.areaTecnica || cba.area || "N/A"}</td>
-                        <td><strong>${cba.nombreCBA || cba.nombre || "-"}</strong></td>
-                        <td>${cba.nombreTipologia || cba.categoria || "-"}</td>
+                        <td>${cba.areaTecnica || "N/A"}</td>
+                        <td><strong>${cba.nombreCBA || "-"}</strong></td>
+                        <td>${cba.nombreTipologia || "-"}</td>
                         <td>${cba.madurez || "-"}</td>
                         <td>
                           <span class="status-badge ${cba.estado && cba.estado.includes("pendientes") ? "status-pending" : "status-defined"}">
@@ -1105,16 +1110,16 @@
                   <tr>
                     <th>Área</th>
                     <th>Nombre</th>
-                    <th>Categoría</th>
+                    <th>Tipología</th>
                     <th>Estado</th>
                   </tr>
                 </thead>
                 <tbody>
                   ${cbas.map((cba) => `
                     <tr>
-                      <td>${cba.area || "N/A"}</td>
-                      <td>${cba.nombre}</td>
-                      <td>${cba.categoria}</td>
+                      <td>${cba.areaTecnica || "N/A"}</td>
+                      <td>${cba.nombreCBA}</td>
+                      <td>${cba.nombreTipologia}</td>
                       <td>
                         <span class="status-badge ${cba.estado.includes("pendientes") ? "status-pending" : "status-defined"}">
                           ${cba.estado}
@@ -1208,7 +1213,7 @@
                 <label for="checklistTemplate">Plantilla (CBA)</label>
                 <select id="checklistTemplate" required>
                   <option value="">Selecciona una plantilla</option>
-                  ${cbas.map((cba) => `<option value="${cba.id}">${cba.nombre} (${cba.codigo})</option>`).join("")}
+                  ${cbas.map((cba) => `<option value="${cba.id}">${cba.nombreCBA} - ${cba.nombreTipologia} (${cba.id})</option>`).join("")}
                 </select>
               </div>
 
@@ -1268,20 +1273,21 @@
 
         async renderMyChecklists() {
           const mainContent = document.getElementById("mainContent");
+          const user = State.getCurrentUser();
 
           try {
-            const result = await API.getOperatorChecklists();
+            const result = await API.getMyChecklists();
             if (!result) {
-              mainContent.innerHTML = `<div class="auth-error"><h2>Error</h2><p>No se pudo obtener checklists. Verifica que la tabla METADATOS esté configurada.</p></div>`;
+              mainContent.innerHTML = `<div class="auth-error"><h2>Error</h2><p>No se pudo obtener checklists. Verifica que la pestaña CHECKLISTS_INDEX esté configurada en QPO-MASTER.</p></div>`;
               return;
             }
             if (result.status === "ok") {
               const checklists = result.checklists;
               mainContent.innerHTML = `
-                <h2 class="page-title">Mis Checklists</h2>
+                <h2 class="page-title">${user.rol === "LIDER-TEAM" ? "Checklists y Asignaciones" : "Mis Checklists"}</h2>
                 ${checklists.length === 0 ? `
                   <div class="empty-state">
-                    <p>No hay checklists creados aún</p>
+                    <p>No hay checklists todavía</p>
                   </div>
                 ` : `
                   <div class="table-wrapper">
@@ -1289,7 +1295,8 @@
                       <thead>
                         <tr>
                           <th>CRQ</th>
-                          <th>Plantilla</th>
+                          <th>CBA</th>
+                          <th>Creado por</th>
                           <th>Fecha Inicio</th>
                           <th>Fecha Fin</th>
                           <th>Estado</th>
@@ -1300,7 +1307,8 @@
                         ${checklists.map((checklist) => `
                           <tr>
                             <td><strong>${checklist.crq}</strong></td>
-                            <td>${checklist.templateId}</td>
+                            <td>${checklist.cbaId}</td>
+                            <td>${checklist.creadoPor}</td>
                             <td>${checklist.fechaInicio}</td>
                             <td>${checklist.fechaFin}</td>
                             <td>
@@ -1309,8 +1317,8 @@
                               </span>
                             </td>
                             <td>
-                              ${checklist.spreadsheetId ? `<button type="button" class="action-btn" onclick="Checklists.edit('${checklist.spreadsheetId}')">Editar</button>` : `<span style="color: red;">Sin ID</span>`}
-                              <button type="button" class="action-btn danger" onclick="Checklists.delete('${checklist.spreadsheetId}', '${checklist.crq}')">Eliminar</button>
+                              ${checklist.spreadsheetId ? `<button type="button" class="action-btn" onclick="Checklists.edit('${checklist.spreadsheetId}', '${checklist.id}')">${user.rol === "LIDER-TEAM" ? "Abrir / Asignar" : "Completar"}</button>` : `<span style="color: red;">Sin ID</span>`}
+                              ${user.rol === "LIDER-TEAM" ? `<button type="button" class="action-btn danger" onclick="Checklists.delete('${checklist.spreadsheetId}', '${checklist.crq}')">Eliminar</button>` : ""}
                             </td>
                           </tr>
                         `).join("")}
@@ -1502,7 +1510,7 @@
           }
         },
 
-        async edit(spreadsheetId) {
+        async edit(spreadsheetId, checklistId) {
           try {
             if (!spreadsheetId || spreadsheetId === "undefined") {
               alert("Error: ID del spreadsheet no válido. Valor recibido: " + spreadsheetId);
@@ -1517,7 +1525,7 @@
             }
 
             if (result.status === "ok") {
-              State.currentEditingChecklist = { id: spreadsheetId, spreadsheetId, phases: result.phases };
+              State.currentEditingChecklist = { id: spreadsheetId, checklistId, spreadsheetId, phases: result.phases };
               this.renderEditor();
             } else {
               alert("Error: " + result.message + " (ID: " + spreadsheetId + ")");
@@ -1542,6 +1550,8 @@
           const mainContent = document.getElementById("mainContent");
           const readonlyHeaders = ["Sec.", "Tipo de tarea", "Ámbito", "Descripción tarea", "Equipo Técnico"];
           const editableHeaders = ["Inicio Previsto", "Fin Previsto", "Inicio Real", "Fin Real", "Nombre del Técnico", "Resultado"];
+          const user = State.getCurrentUser();
+          const isLiderTeam = user.rol === "LIDER-TEAM";
 
           mainContent.innerHTML = `
             <h2 class="page-title">Editar Checklist - Llenar Información Real</h2>
@@ -1577,11 +1587,23 @@
                         phase.rows && phase.rows.length > 0
                           ? phase.rows
                               .map(
-                                (row, rowIdx) => `
+                                (row, rowIdx) => {
+                                  const asignado = String(row[4] || "").trim();
+                                  const canFillRow = isLiderTeam || user.rol === "ADMIN" || (asignado && asignado.toLowerCase() === user.email.toLowerCase());
+                                  return `
                             <tr style="border-bottom: 1px solid #ddd;">
                               ${row
                                 .map((cell, cellIdx) => {
-                                  const isReadonly = cellIdx < 4;
+                                  if (cellIdx === 4) {
+                                    return `
+                                <td style="padding: 8px; border: 1px solid #ddd; background: #f0f0f0; font-size: 13px;" data-equipo-tecnico="${phase.name}" data-row="${rowIdx}" data-value="${asignado}">
+                                  <span>${asignado || "Sin asignar"}</span>
+                                  ${isLiderTeam ? `<button type="button" class="action-btn" style="margin-left: 6px;" onclick="Checklists.assign('${row[0]}')">Asignar</button>` : ""}
+                                </td>
+                              `;
+                                  }
+
+                                  const isReadonly = cellIdx < 4 || !canFillRow;
                                   const isDateField = cellIdx >= 5 && cellIdx <= 8;
                                   const inputStyle = isReadonly
                                     ? "background: #f0f0f0; color: #666; border: 1px solid #ddd; padding: 8px; width: 100%; font-size: 13px;"
@@ -1613,7 +1635,8 @@
                                 })
                                 .join("")}
                             </tr>
-                          `
+                          `;
+                                }
                               )
                               .join("")
                           : `
@@ -1640,7 +1663,6 @@
         },
 
         async save() {
-          const inputs = document.querySelectorAll(".phase-table input");
           const phases = [];
 
           // Recopilar datos por fase
@@ -1662,6 +1684,14 @@
               phaseRows[rowIdx][colIdx] = value;
             });
 
+            // Columna "Equipo Técnico" (col 4): ya no es un input, se conserva
+            // el valor de asignación actual (se edita solo vía Checklists.assign()).
+            document.querySelectorAll(`td[data-equipo-tecnico="${phase.name}"]`).forEach((td) => {
+              const rowIdx = parseInt(td.dataset.row);
+              if (!phaseRows[rowIdx]) phaseRows[rowIdx] = [];
+              phaseRows[rowIdx][4] = td.dataset.value || "";
+            });
+
             if (phaseRows.length > 0) {
               phases.push({
                 name: phase.name,
@@ -1681,6 +1711,24 @@
             }
           } catch (error) {
             alert("Error: " + error);
+          }
+        },
+
+        async assign(pasoSec) {
+          const checklist = State.currentEditingChecklist;
+          const email = prompt(`Asignar el paso ${pasoSec} a (email):`);
+          if (!email) return;
+
+          try {
+            const result = await API.assignStep(checklist.checklistId, pasoSec, email.trim());
+            if (result.status === "ok") {
+              alert(result.message);
+              await Checklists.edit(checklist.spreadsheetId, checklist.checklistId);
+            } else {
+              alert("Error: " + result.message);
+            }
+          } catch (error) {
+            alert("Error al asignar: " + error);
           }
         },
 
@@ -1778,7 +1826,7 @@
           }
 
           await this.loadSteps(cbaId);
-          UI.openModal(`Editar Pasos - ${cba.nombre}`);
+          UI.openModal(`Editar Pasos - ${cba.nombreCBA}`);
         },
 
         async loadSteps(cbaId) {

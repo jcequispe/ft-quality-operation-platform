@@ -1,0 +1,5 @@
+id,nombre,descripcion,permisos
+admin,ADMIN,Administrador del sistema - Acceso total,view_all_checklists|create_roles|manage_users|manage_areas|manage_cbas|view_reports|export_data|delete_checklists
+lider_team,LIDER-TEAM,Líder de área técnica - Define pasos de CBAs y crea/asigna checklists,view_own_cbas|create_cba_template|update_cba_template|delete_cba_template|manage_cbas_steps|view_team_checklists|create_checklist|assign_checklist_steps
+operador,OPERADOR,Operador de campo - Completa los pasos de checklist que le asignan,view_assigned_checklists|complete_assigned_steps
+

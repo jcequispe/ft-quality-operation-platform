@@ -3,39 +3,22 @@
  *
  * Backend para gestión de checklists de calidad.
  * Integración con Google Sheets para persistencia de datos.
+ *
+ * Arquitectura: ver docs/architecture.md — un único spreadsheet "QPO-MASTER"
+ * con 7 pestañas (ROLES, AREAS, USUARIOS, CBAS, PASOS, CHECKLISTS_INDEX,
+ * ASIGNACIONES). Los checklists de cada CRQ siguen siendo spreadsheets
+ * independientes, referenciados desde CHECKLISTS_INDEX.
  */
 
-// Sheet maestro que contiene los IDs de todos los demás sheets
-const MAESTRO_SHEET_ID = "17cV-id6JYY7F14NIcpkMfuZ03QhjPb3cNRTViBrmT3Y";
+const MASTER_SHEET_ID = "1wFBT60fDLLTRSXIfOVErcwuSUZWcO9K0Ygm-5MPdwgc";
 
-// IDs de Google Sheets (se cargarán desde el maestro)
-let SHEETS_IDS: Record<string, string> = {};
-
-// Cargar configuración de IDs desde el sheet maestro
-function loadSheetIds(): Record<string, string> {
-  try {
-    const ss = SpreadsheetApp.openById(MAESTRO_SHEET_ID);
-    const sheet = ss.getSheets()[0];
-    const data = sheet.getDataRange().getValues() as unknown[][];
-
-    const ids: Record<string, string> = {};
-
-    // Skip header row y buscar columna "Sheet ID"
-    for (let i = 1; i < data.length; i++) {
-      const tabla = String(data[i][0]).trim();
-      const sheetId = String(data[i][1]).trim();
-
-      if (tabla && sheetId && !sheetId.includes("[REEMPLAZAR")) {
-        ids[tabla] = sheetId;
-      }
-    }
-
-    SHEETS_IDS = ids;
-    return ids;
-  } catch (error) {
-    console.log("Error al cargar IDs: " + error);
-    return {};
+/** Abre una pestaña de QPO-MASTER por nombre. */
+function getMasterSheet(tabName: string): GoogleAppsScript.Spreadsheet.Sheet {
+  const sheet = SpreadsheetApp.openById(MASTER_SHEET_ID).getSheetByName(tabName);
+  if (!sheet) {
+    throw new Error(`Pestaña "${tabName}" no encontrada en QPO-MASTER`);
   }
+  return sheet;
 }
 
 interface CBAStep {
@@ -43,17 +26,29 @@ interface CBAStep {
   tipoTarea: string;
   ambito: string;
   descripcion: string;
+  responsable: string;
 }
 
 interface CBA {
   id: string;
-  codigo: string;
-  nombre: string;
-  categoria: string;
-  descripcion: string;
+  codigoArea: string;
+  areaTecnica: string;
+  nombreTipologia: string;
+  gestionDelCambio: string;
+  nombreCBA: string;
+  candidataL04: string;
+  candidataL05: string;
+  madurez: string;
+  letraCBA: string;
+  numeroCookbok: string;
+  urlCBA: string;
+  codificacionTipologia: string;
+  secuencia: number;
+  tituloCatalogo: string;
+  fechaIncorporacion: string;
+  personaQO: string;
   estado: string;
-  creado: string;
-  responsable: string;
+  fechaCreacion: string;
   pasos?: {
     preIntervention: CBAStep[];
     intervention: CBAStep[];
@@ -91,9 +86,9 @@ interface Area {
 interface Checklist {
   id: string;
   crq: string;
-  emailOperador: string;
-  templateId: string;
+  cbaId: string;
   spreadsheetId: string;
+  creadoPor: string;
   fechaInicio: string;
   fechaFin: string;
   estado: string;
@@ -102,9 +97,6 @@ interface Checklist {
 
 /** Handle HTTP GET requests. Serves the main HTML page. */
 function doGet(): GoogleAppsScript.HTML.HtmlOutput {
-  // Cargar IDs de sheets desde el maestro
-  loadSheetIds();
-
   return HtmlService.createHtmlOutputFromFile("client")
     .setTitle("Gestión de CBAs - Networking")
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
@@ -158,8 +150,10 @@ function processRequest(data: Record<string, unknown>): Record<string, unknown> 
         data.level as string,
         data.freezing as string,
       );
-    case "getOperatorChecklists":
-      return getOperatorChecklists();
+    case "getMyChecklists":
+      return getMyChecklists();
+    case "assignStep":
+      return assignStep(data.checklistId as string, data.pasoSec as string, data.email as string);
     case "getChecklistData":
       return getChecklistData(data.spreadsheetId as string);
     case "saveChecklistData":
@@ -182,22 +176,25 @@ function processRequest(data: Record<string, unknown>): Record<string, unknown> 
   }
 }
 
+/** Resuelve el email del usuario actual (sesión de Google, con fallback para pruebas locales). */
+function resolveCurrentEmail(): string {
+  try {
+    const email = Session.getEffectiveUser().getEmail();
+    if (email) return email;
+  } catch {
+    // sigue al fallback
+  }
+  return "jcequispe@gmail.com";
+}
+
 /** Get current user - use email from config */
 function getCurrentUser(): Record<string, unknown> {
   try {
-    // Para testing: usar email del propietario del script
-    // En producción, esto vendría de configuración o de parámetros URL
-    const currentEmail = "jcequispe@gmail.com"; // Email del propietario del script
+    const currentEmail = resolveCurrentEmail();
 
-    if (!SHEETS_IDS.USUARIOS) {
-      loadSheetIds();
-    }
-
-    const ss = SpreadsheetApp.openById(SHEETS_IDS.USUARIOS);
-    const sheet = ss.getSheets()[0];
+    const sheet = getMasterSheet("USUARIOS");
     const data = sheet.getDataRange().getValues() as unknown[][];
 
-    // Skip header row y buscar usuario
     for (let i = 1; i < data.length; i++) {
       const userEmail = String(data[i][0]).toLowerCase();
       if (userEmail === currentEmail.toLowerCase()) {
@@ -237,47 +234,38 @@ function getCurrentUser(): Record<string, unknown> {
   }
 }
 
-/** Check if user is ADMIN */
-function isAdminUser(email: string): boolean {
+/** Busca el rol de un usuario por email en USUARIOS. */
+function getUserRole(email: string): string | null {
   try {
-    if (!SHEETS_IDS.USUARIOS) {
-      loadSheetIds();
-    }
-
-    const ss = SpreadsheetApp.openById(SHEETS_IDS.USUARIOS);
-    const sheet = ss.getSheets()[0];
+    const sheet = getMasterSheet("USUARIOS");
     const data = sheet.getDataRange().getValues() as unknown[][];
 
     for (let i = 1; i < data.length; i++) {
-      const userEmail = String(data[i][0]).toLowerCase();
-      if (userEmail === email.toLowerCase()) {
-        const rol = String(data[i][2]);
-        return rol === "ADMIN";
+      if (String(data[i][0]).toLowerCase() === email.toLowerCase()) {
+        return String(data[i][2]);
       }
     }
-    return false;
+    return null;
   } catch (error) {
-    console.log("Error al verificar rol ADMIN: " + error);
-    return false;
+    console.log("Error al obtener rol: " + error);
+    return null;
   }
+}
+
+/** Check if user is ADMIN */
+function isAdminUser(email: string): boolean {
+  return getUserRole(email) === "ADMIN";
+}
+
+/** Check if user is LIDER-TEAM */
+function isLiderTeamUser(email: string): boolean {
+  return getUserRole(email) === "LIDER-TEAM";
 }
 
 /** Get all areas */
 function getAreas(): Record<string, unknown> {
   try {
-    if (!SHEETS_IDS.AREAS) {
-      loadSheetIds();
-    }
-
-    if (!SHEETS_IDS.AREAS) {
-      return {
-        status: "error",
-        message: "Tabla AREAS no configurada en el maestro",
-      };
-    }
-
-    const ss = SpreadsheetApp.openById(SHEETS_IDS.AREAS);
-    const sheet = ss.getSheets()[0];
+    const sheet = getMasterSheet("AREAS");
     const data = sheet.getDataRange().getValues() as unknown[][];
 
     const areas: Area[] = [];
@@ -304,28 +292,14 @@ function getAreas(): Record<string, unknown> {
 /** Create new area */
 function createArea(codigo: string, nombre: string): Record<string, unknown> {
   try {
-    const currentEmail = "jcequispe@gmail.com";
-    if (!isAdminUser(currentEmail)) {
+    if (!isAdminUser(resolveCurrentEmail())) {
       return {
         status: "error",
         message: "Solo administradores pueden crear áreas",
       };
     }
 
-    if (!SHEETS_IDS.AREAS) {
-      loadSheetIds();
-    }
-
-    if (!SHEETS_IDS.AREAS) {
-      return {
-        status: "error",
-        message: "Tabla AREAS no configurada",
-      };
-    }
-
-    const ss = SpreadsheetApp.openById(SHEETS_IDS.AREAS);
-    const sheet = ss.getSheets()[0];
-
+    const sheet = getMasterSheet("AREAS");
     sheet.appendRow([codigo, nombre]);
 
     return {
@@ -343,20 +317,14 @@ function createArea(codigo: string, nombre: string): Record<string, unknown> {
 /** Update area */
 function updateArea(codigoAnterior: string, codigo: string, nombre: string): Record<string, unknown> {
   try {
-    const currentEmail = "jcequispe@gmail.com";
-    if (!isAdminUser(currentEmail)) {
+    if (!isAdminUser(resolveCurrentEmail())) {
       return {
         status: "error",
         message: "Solo administradores pueden editar áreas",
       };
     }
 
-    if (!SHEETS_IDS.AREAS) {
-      loadSheetIds();
-    }
-
-    const ss = SpreadsheetApp.openById(SHEETS_IDS.AREAS);
-    const sheet = ss.getSheets()[0];
+    const sheet = getMasterSheet("AREAS");
     const data = sheet.getDataRange().getValues() as unknown[][];
 
     for (let i = 1; i < data.length; i++) {
@@ -385,20 +353,14 @@ function updateArea(codigoAnterior: string, codigo: string, nombre: string): Rec
 /** Delete area */
 function deleteArea(codigo: string): Record<string, unknown> {
   try {
-    const currentEmail = "jcequispe@gmail.com";
-    if (!isAdminUser(currentEmail)) {
+    if (!isAdminUser(resolveCurrentEmail())) {
       return {
         status: "error",
         message: "Solo administradores pueden eliminar áreas",
       };
     }
 
-    if (!SHEETS_IDS.AREAS) {
-      loadSheetIds();
-    }
-
-    const ss = SpreadsheetApp.openById(SHEETS_IDS.AREAS);
-    const sheet = ss.getSheets()[0];
+    const sheet = getMasterSheet("AREAS");
     const data = sheet.getDataRange().getValues() as unknown[][];
 
     for (let i = data.length - 1; i >= 1; i--) {
@@ -423,29 +385,36 @@ function deleteArea(codigo: string): Record<string, unknown> {
   }
 }
 
-/** Get all CBAs from Google Sheet. */
+/** Get all CBAs from QPO-MASTER (pestaña CBAS, unificada para todas las áreas). */
 function getCBAs(): Record<string, unknown> {
   try {
-    if (!SHEETS_IDS.CBAS_NETWORKING) {
-      loadSheetIds();
-    }
-    const ss = SpreadsheetApp.openById(SHEETS_IDS.CBAS_NETWORKING);
-    const sheet = ss.getSheets()[0];
+    const sheet = getMasterSheet("CBAS");
     const data = sheet.getDataRange().getValues() as unknown[][];
 
-    // Skip header row
     const cbas: CBA[] = [];
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
+      if (!row[0]) continue;
       cbas.push({
         id: String(row[0]),
-        codigo: String(row[1]),
-        nombre: String(row[2]),
-        categoria: String(row[3]),
-        descripcion: String(row[4]),
-        estado: String(row[5]),
-        creado: String(row[6]),
-        responsable: String(row[7]),
+        codigoArea: String(row[1]),
+        areaTecnica: String(row[2]),
+        nombreTipologia: String(row[3]),
+        gestionDelCambio: String(row[4]),
+        nombreCBA: String(row[5]),
+        candidataL04: String(row[6]),
+        candidataL05: String(row[7]),
+        madurez: String(row[8]),
+        letraCBA: String(row[9]),
+        numeroCookbok: String(row[10]),
+        urlCBA: String(row[11]),
+        codificacionTipologia: String(row[12]),
+        secuencia: Number.isFinite(Number(row[13])) ? Number(row[13]) : 0,
+        tituloCatalogo: String(row[14]),
+        fechaIncorporacion: String(row[15]),
+        personaQO: String(row[16]),
+        estado: String(row[17]),
+        fechaCreacion: String(row[18]),
       });
     }
 
@@ -464,11 +433,7 @@ function getCBAs(): Record<string, unknown> {
 /** Get steps for a specific CBA. */
 function getCBASteps(cbaId: string): Record<string, unknown> {
   try {
-    if (!SHEETS_IDS.PASOS_CBAS) {
-      loadSheetIds();
-    }
-    const ss = SpreadsheetApp.openById(SHEETS_IDS.PASOS_CBAS);
-    const sheet = ss.getSheets()[0];
+    const sheet = getMasterSheet("PASOS");
     const data = sheet.getDataRange().getValues() as unknown[][];
 
     const pasos = {
@@ -485,7 +450,7 @@ function getCBASteps(cbaId: string): Record<string, unknown> {
 
       const fase = String(row[1]).toLowerCase().replace(/-/g, "").replace(/intervención/g, "intervention");
       const step: CBAStep = {
-        sec: Number(row[2]),
+        sec: String(row[2]),
         tipoTarea: String(row[3]),
         ambito: String(row[4]),
         descripcion: String(row[5]),
@@ -510,23 +475,17 @@ function getCBASteps(cbaId: string): Record<string, unknown> {
   }
 }
 
-/** Create new CBA in Google Sheet */
+/** Create new CBA in QPO-MASTER */
 function createCBA(cba: CBANew): Record<string, unknown> {
   try {
-    const currentEmail = "jcequispe@gmail.com";
-    if (!isAdminUser(currentEmail)) {
+    if (!isAdminUser(resolveCurrentEmail())) {
       return {
         status: "error",
         message: "Solo administradores pueden crear CBAs",
       };
     }
 
-    if (!SHEETS_IDS.CBAS_NETWORKING) {
-      loadSheetIds();
-    }
-
-    const ss = SpreadsheetApp.openById(SHEETS_IDS.CBAS_NETWORKING);
-    const sheet = ss.getSheets()[0];
+    const sheet = getMasterSheet("CBAS");
 
     const id = `CBA-${String(Date.now()).slice(-8)}`;
     const estado = "Pasos pendientes";
@@ -572,20 +531,14 @@ function createCBA(cba: CBANew): Record<string, unknown> {
 /** Update existing CBA */
 function updateCBA(id: string, cba: CBANew): Record<string, unknown> {
   try {
-    const currentEmail = "jcequispe@gmail.com";
-    if (!isAdminUser(currentEmail)) {
+    if (!isAdminUser(resolveCurrentEmail())) {
       return {
         status: "error",
         message: "Solo administradores pueden editar CBAs",
       };
     }
 
-    if (!SHEETS_IDS.CBAS_NETWORKING) {
-      loadSheetIds();
-    }
-
-    const ss = SpreadsheetApp.openById(SHEETS_IDS.CBAS_NETWORKING);
-    const sheet = ss.getSheets()[0];
+    const sheet = getMasterSheet("CBAS");
     const data = sheet.getDataRange().getValues() as unknown[][];
 
     for (let i = 1; i < data.length; i++) {
@@ -637,11 +590,7 @@ function updateCBA(id: string, cba: CBANew): Record<string, unknown> {
 /** Save steps for a CBA. */
 function saveCBASteps(cbaId: string, pasos: Record<string, CBAStep[]>): Record<string, unknown> {
   try {
-    if (!SHEETS_IDS.PASOS_CBAS || !SHEETS_IDS.CBAS_NETWORKING) {
-      loadSheetIds();
-    }
-    const ss = SpreadsheetApp.openById(SHEETS_IDS.PASOS_CBAS);
-    const sheet = ss.getSheets()[0];
+    const sheet = getMasterSheet("PASOS");
 
     // Delete existing steps for this CBA
     const data = sheet.getDataRange().getValues() as unknown[][];
@@ -667,13 +616,12 @@ function saveCBASteps(cbaId: string, pasos: Record<string, CBAStep[]>): Record<s
       }
     }
 
-    // Update CBA status in CBAs sheet
-    const cbasSheetId = SHEETS_IDS.CBAS_NETWORKING || (loadSheetIds() && SHEETS_IDS.CBAS_NETWORKING);
-    const cbasSheet = SpreadsheetApp.openById(cbasSheetId).getSheets()[0];
+    // Update CBA status in CBAS
+    const cbasSheet = getMasterSheet("CBAS");
     const cbasData = cbasSheet.getDataRange().getValues() as unknown[][];
     for (let i = 1; i < cbasData.length; i++) {
       if (String(cbasData[i][0]) === cbaId) {
-        cbasSheet.getRange(i + 1, 6).setValue("Pasos definidos");
+        cbasSheet.getRange(i + 1, 18).setValue("Pasos definidos"); // columna 18 = estado
         break;
       }
     }
@@ -690,14 +638,10 @@ function saveCBASteps(cbaId: string, pasos: Record<string, CBAStep[]>): Record<s
   }
 }
 
-/** Delete CBA from Google Sheet. */
+/** Delete CBA from QPO-MASTER. */
 function deleteCBA(cbaId: string): Record<string, unknown> {
   try {
-    if (!SHEETS_IDS.CBAS_NETWORKING || !SHEETS_IDS.PASOS_CBAS) {
-      loadSheetIds();
-    }
-    const ss = SpreadsheetApp.openById(SHEETS_IDS.CBAS_NETWORKING);
-    const sheet = ss.getSheets()[0];
+    const sheet = getMasterSheet("CBAS");
     const data = sheet.getDataRange().getValues() as unknown[][];
 
     // Find and delete CBA row
@@ -709,8 +653,7 @@ function deleteCBA(cbaId: string): Record<string, unknown> {
     }
 
     // Delete associated steps
-    const stepsSheetId = SHEETS_IDS.PASOS_CBAS || (loadSheetIds() && SHEETS_IDS.PASOS_CBAS);
-    const stepsSheet = SpreadsheetApp.openById(stepsSheetId).getSheets()[0];
+    const stepsSheet = getMasterSheet("PASOS");
     const stepsData = stepsSheet.getDataRange().getValues() as unknown[][];
     for (let i = stepsData.length - 1; i >= 1; i--) {
       if (String(stepsData[i][0]) === cbaId) {
@@ -730,7 +673,11 @@ function deleteCBA(cbaId: string): Record<string, unknown> {
   }
 }
 
-/** Create a new checklist based on a template. */
+/**
+ * Create a new checklist based on a template.
+ * Solo LIDER-TEAM puede crear checklists (RF-5.1) — luego asigna cada paso
+ * a un técnico con assignStep().
+ */
 function createChecklist(
   crq: string,
   templateId: string,
@@ -741,34 +688,23 @@ function createChecklist(
   freezing: string,
 ): Record<string, unknown> {
   try {
-    if (!SHEETS_IDS.PASOS_CBAS || !SHEETS_IDS.METADATOS || !SHEETS_IDS.CBAS_NETWORKING) {
-      loadSheetIds();
-    }
+    const currentEmail = resolveCurrentEmail();
 
-    let currentEmail = "";
-    try {
-      currentEmail = Session.getEffectiveUser().getEmail();
-    } catch {
-      currentEmail = "jcequispe@gmail.com"; // Fallback email
+    if (!isLiderTeamUser(currentEmail)) {
+      return {
+        status: "error",
+        message: "Solo LIDER-TEAM puede crear checklists",
+      };
     }
 
     // Get CBA info
-    const cbasSheetData = SpreadsheetApp.openById(SHEETS_IDS.CBAS_NETWORKING)
-      .getSheets()[0]
-      .getDataRange()
-      .getValues() as unknown[][];
+    const cbasSheetData = getMasterSheet("CBAS").getDataRange().getValues() as unknown[][];
     const cbaInfo = cbasSheetData.find((row, idx) => idx > 0 && String(row[0]) === templateId);
-    const cbaCode = cbaInfo ? String(cbaInfo[1]) : "";
-    const cbaName = cbaInfo ? String(cbaInfo[2]) : "";
+    const cbaCode = cbaInfo ? String(cbaInfo[12]) : ""; // codificacionTipologia
+    const cbaName = cbaInfo ? String(cbaInfo[5]) : ""; // nombreCBA
 
-    // Get template data
-    const templateStepsSheetId = SHEETS_IDS.PASOS_CBAS;
-    const templateSheetData = SpreadsheetApp.openById(templateStepsSheetId)
-      .getSheets()[0]
-      .getDataRange()
-      .getValues() as unknown[][];
-
-    // Filter template steps by templateId
+    // Get template steps
+    const templateSheetData = getMasterSheet("PASOS").getDataRange().getValues() as unknown[][];
     const templateSteps = templateSheetData.filter((row, idx) => idx > 0 && String(row[0]) === templateId);
 
     // Create a new Google Spreadsheet
@@ -776,7 +712,8 @@ function createChecklist(
     const newSheet = newSpreadsheet.getSheets()[0];
     const spreadsheetId = newSpreadsheet.getId();
 
-    // Share the spreadsheet with the current user
+    // Share the spreadsheet with the creator (LIDER-TEAM); los técnicos se
+    // agregan como editores cuando se les asigna un paso (assignStep).
     try {
       const file = DriveApp.getFileById(spreadsheetId);
       file.addEditor(currentEmail);
@@ -863,7 +800,7 @@ function createChecklist(
         String(row[3]), // Tipo
         "PERÚ", // Ámbito (siempre PERÚ)
         String(row[5]), // Descripción
-        "", // Equipo Técnico
+        "", // Equipo Técnico — se llena con assignStep()
         fechaInicio, // Inicio Previsto
         fechaFin, // Fin Previsto
         "", // Inicio Real
@@ -897,23 +834,18 @@ function createChecklist(
       }
     });
 
-    // Save metadata
-    if (!SHEETS_IDS.METADATOS) {
-      loadSheetIds();
-    }
-    const metadataSheet = SpreadsheetApp.openById(SHEETS_IDS.METADATOS).getSheets()[0];
+    // Registrar en CHECKLISTS_INDEX
     const checklistId = `CHK-${crq}-${Math.random().toString(36).substr(2, 8).toUpperCase()}`;
-
-    metadataSheet.appendRow([
+    getMasterSheet("CHECKLISTS_INDEX").appendRow([
+      checklistId,
       crq,
-      currentEmail,
       templateId,
       spreadsheetId,
+      currentEmail,
       fechaInicio,
       fechaFin,
       "Activo",
       new Date().toISOString().split("T")[0],
-      checklistId,
     ]);
 
     return {
@@ -930,46 +862,92 @@ function createChecklist(
   }
 }
 
-/** Get all checklists for the current operator. */
-function getOperatorChecklists(): Record<string, unknown> {
+/**
+ * Asigna un paso de un checklist a un técnico (RF-5.3/5.4): comparte el
+ * spreadsheet del checklist con esa persona y registra la asignación.
+ * Solo LIDER-TEAM puede asignar.
+ */
+function assignStep(checklistId: string, pasoSec: string, email: string): Record<string, unknown> {
   try {
-    const currentEmail = "jcequispe@gmail.com"; // Fallback email
+    if (!isLiderTeamUser(resolveCurrentEmail())) {
+      return {
+        status: "error",
+        message: "Solo LIDER-TEAM puede asignar pasos",
+      };
+    }
 
-    if (!SHEETS_IDS.METADATOS) {
-      const loaded = loadSheetIds();
-      if (!loaded.METADATOS) {
-        return {
-          status: "error",
-          message: "Tabla METADATOS no configurada en el maestro",
-        };
+    const indexData = getMasterSheet("CHECKLISTS_INDEX").getDataRange().getValues() as unknown[][];
+    const checklistRow = indexData.find((row, idx) => idx > 0 && String(row[0]) === checklistId);
+    if (!checklistRow) {
+      return {
+        status: "error",
+        message: "Checklist no encontrado",
+      };
+    }
+    const spreadsheetId = String(checklistRow[3]);
+
+    try {
+      DriveApp.getFileById(spreadsheetId).addEditor(email);
+    } catch (e) {
+      console.log("Aviso: No se pudo compartir el archivo: " + e);
+    }
+
+    getMasterSheet("ASIGNACIONES").appendRow([
+      checklistId,
+      pasoSec,
+      email.toLowerCase(),
+      new Date().toISOString().split("T")[0],
+    ]);
+
+    return {
+      status: "ok",
+      message: `Paso ${pasoSec} asignado a ${email}`,
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message: `Error al asignar paso: ${error}`,
+    };
+  }
+}
+
+/**
+ * Checklists del usuario actual: los que creó (LIDER-TEAM) más aquellos
+ * donde tiene al menos un paso asignado (RF-5.6).
+ */
+function getMyChecklists(): Record<string, unknown> {
+  try {
+    const currentEmail = resolveCurrentEmail().toLowerCase();
+
+    const indexData = getMasterSheet("CHECKLISTS_INDEX").getDataRange().getValues() as unknown[][];
+    const asignacionesData = getMasterSheet("ASIGNACIONES").getDataRange().getValues() as unknown[][];
+
+    const assignedChecklistIds = new Set<string>();
+    for (let i = 1; i < asignacionesData.length; i++) {
+      if (String(asignacionesData[i][2]).toLowerCase() === currentEmail) {
+        assignedChecklistIds.add(String(asignacionesData[i][0]));
       }
     }
 
-    const ss = SpreadsheetApp.openById(SHEETS_IDS.METADATOS);
-    const sheet = ss.getSheets()[0];
-    const data = sheet.getDataRange().getValues() as unknown[][];
-
     const checklists: Checklist[] = [];
+    for (let i = 1; i < indexData.length; i++) {
+      const row = indexData[i];
+      const checklistId = String(row[0]);
+      const creadoPor = String(row[4]).toLowerCase();
 
-    // Skip header row and filter by current email
-    for (let i = 1; i < data.length; i++) {
-      const row = data[i];
-      if (String(row[1]).toLowerCase() === currentEmail.toLowerCase()) {
-        // Use checklistId from column 9 if it exists, otherwise generate one
-        const checklistId = row[8] && String(row[8]).trim() !== "" ? String(row[8]) : `CHK-${String(row[0])}-${String(row[3])}`;
+      if (creadoPor !== currentEmail && !assignedChecklistIds.has(checklistId)) continue;
 
-        checklists.push({
-          id: checklistId,
-          crq: String(row[0]),
-          emailOperador: String(row[1]),
-          templateId: String(row[2]),
-          spreadsheetId: String(row[3]),
-          fechaInicio: String(row[4]),
-          fechaFin: String(row[5]),
-          estado: String(row[6]),
-          fechaCreacion: String(row[7]),
-        });
-      }
+      checklists.push({
+        id: checklistId,
+        crq: String(row[1]),
+        cbaId: String(row[2]),
+        spreadsheetId: String(row[3]),
+        creadoPor: String(row[4]),
+        fechaInicio: String(row[5]),
+        fechaFin: String(row[6]),
+        estado: String(row[7]),
+        fechaCreacion: String(row[8]),
+      });
     }
 
     return {
@@ -1020,12 +998,12 @@ function getChecklistData(spreadsheetId: string): Record<string, unknown> {
 
       if (i >= data.length) break;
 
-      const phaseData = {
+      const phaseData: Record<string, unknown> = {
         name: phaseDef.name,
         color: phaseDef.color,
         startRow: i + 1, // Número de fila (1-indexed)
         headers: tableHeaders,
-        rows: [],
+        rows: [] as string[][],
       };
 
       i++; // Siguiente fila (datos)
@@ -1046,7 +1024,7 @@ function getChecklistData(spreadsheetId: string): Record<string, unknown> {
           break;
         }
 
-        phaseData.rows.push(data[i].map((cell) => (cell === null || cell === undefined ? "" : String(cell))));
+        (phaseData.rows as string[][]).push(data[i].map((cell) => (cell === null || cell === undefined ? "" : String(cell))));
         i++;
       }
 
@@ -1099,14 +1077,10 @@ function saveChecklistData(spreadsheetId: string, data: Record<string, unknown>)
   }
 }
 
-/** Get all users from Google Sheet. */
+/** Get all users from QPO-MASTER. */
 function getUsers(): Record<string, unknown> {
   try {
-    if (!SHEETS_IDS.USUARIOS) {
-      loadSheetIds();
-    }
-    const ss = SpreadsheetApp.openById(SHEETS_IDS.USUARIOS);
-    const sheet = ss.getSheets()[0];
+    const sheet = getMasterSheet("USUARIOS");
     const data = sheet.getDataRange().getValues() as unknown[][];
 
     const users: Record<string, unknown>[] = [];
@@ -1139,11 +1113,7 @@ function getUsers(): Record<string, unknown> {
 /** Toggle user active status. */
 function toggleUserActive(email: string, active: boolean): Record<string, unknown> {
   try {
-    if (!SHEETS_IDS.USUARIOS) {
-      loadSheetIds();
-    }
-    const ss = SpreadsheetApp.openById(SHEETS_IDS.USUARIOS);
-    const sheet = ss.getSheets()[0];
+    const sheet = getMasterSheet("USUARIOS");
     const data = sheet.getDataRange().getValues() as unknown[][];
 
     // Find user row and update column 7 (activo)
@@ -1169,14 +1139,10 @@ function toggleUserActive(email: string, active: boolean): Record<string, unknow
   }
 }
 
-/** Create a new user in Google Sheet. */
+/** Create a new user in QPO-MASTER. */
 function createUser(data: Record<string, unknown>): Record<string, unknown> {
   try {
-    if (!SHEETS_IDS.USUARIOS) {
-      loadSheetIds();
-    }
-    const ss = SpreadsheetApp.openById(SHEETS_IDS.USUARIOS);
-    const sheet = ss.getSheets()[0];
+    const sheet = getMasterSheet("USUARIOS");
 
     const newRow = [
       String(data.email).toLowerCase(),
@@ -1202,14 +1168,10 @@ function createUser(data: Record<string, unknown>): Record<string, unknown> {
   }
 }
 
-/** Update an existing user in Google Sheet. */
+/** Update an existing user in QPO-MASTER. */
 function updateUser(data: Record<string, unknown>): Record<string, unknown> {
   try {
-    if (!SHEETS_IDS.USUARIOS) {
-      loadSheetIds();
-    }
-    const ss = SpreadsheetApp.openById(SHEETS_IDS.USUARIOS);
-    const sheet = ss.getSheets()[0];
+    const sheet = getMasterSheet("USUARIOS");
     const sheetData = sheet.getDataRange().getValues() as unknown[][];
 
     const email = String(data.email).toLowerCase();
@@ -1242,7 +1204,7 @@ function updateUser(data: Record<string, unknown>): Record<string, unknown> {
   }
 }
 
-/** Delete a checklist spreadsheet and its metadata. */
+/** Delete a checklist spreadsheet and its metadata + asignaciones. */
 function deleteChecklist(spreadsheetId: string): Record<string, unknown> {
   try {
     // Delete the spreadsheet from Google Drive
@@ -1253,18 +1215,26 @@ function deleteChecklist(spreadsheetId: string): Record<string, unknown> {
       console.log("Aviso: No se pudo eliminar el spreadsheet: " + driveError);
     }
 
-    // Delete the metadata record from METADATOS
-    if (!SHEETS_IDS.METADATOS) {
-      loadSheetIds();
-    }
-    const metadataSheet = SpreadsheetApp.openById(SHEETS_IDS.METADATOS).getSheets()[0];
-    const metadataData = metadataSheet.getDataRange().getValues() as unknown[][];
+    const indexSheet = getMasterSheet("CHECKLISTS_INDEX");
+    const indexData = indexSheet.getDataRange().getValues() as unknown[][];
 
-    // Find and delete the row with this spreadsheetId
-    for (let i = metadataData.length - 1; i >= 1; i--) {
-      if (String(metadataData[i][3]) === spreadsheetId) {
-        metadataSheet.deleteRow(i + 1);
+    let checklistId = "";
+    for (let i = indexData.length - 1; i >= 1; i--) {
+      if (String(indexData[i][3]) === spreadsheetId) {
+        checklistId = String(indexData[i][0]);
+        indexSheet.deleteRow(i + 1);
         break;
+      }
+    }
+
+    // Delete related ASIGNACIONES rows
+    if (checklistId) {
+      const asignacionesSheet = getMasterSheet("ASIGNACIONES");
+      const asignacionesData = asignacionesSheet.getDataRange().getValues() as unknown[][];
+      for (let i = asignacionesData.length - 1; i >= 1; i--) {
+        if (String(asignacionesData[i][0]) === checklistId) {
+          asignacionesSheet.deleteRow(i + 1);
+        }
       }
     }
 
