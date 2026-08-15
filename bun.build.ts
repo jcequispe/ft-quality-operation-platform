@@ -5,7 +5,7 @@ const result = await Bun.build({
   outdir: "dist",
   plugins: [
     gasPlugin({
-    include: ["src/**/*.html"],
+    include: ["src/**/*.html", "src/**/*.css"],
     globals: ["doGet","doPost"],
     autoGlobals: true,
     }),
