@@ -1044,6 +1044,167 @@ textarea.fc {
   text-align: center;
 }
 
+/* ────── TABLERO KANBAN ────── */
+.kb-board {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  overflow-x: auto;
+  padding-bottom: 1rem;
+  -webkit-overflow-scrolling: touch;
+}
+
+.kb-col {
+  flex: 1 1 0;
+  min-width: 250px;
+  background: var(--gray-100);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem;
+}
+
+.kb-col.kb-over {
+  outline: 2px dashed var(--primary);
+  background: var(--primary-lter);
+}
+
+.kb-col__hd {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  color: var(--gray-700);
+  padding: 0 0.25rem 0.75rem;
+}
+
+.kb-col__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.kb-col__count {
+  margin-left: auto;
+  background: white;
+  border: 1px solid var(--gray-200);
+  color: var(--gray-600);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+}
+
+.kb-col__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 80px;
+}
+
+.kb-empty {
+  text-align: center;
+  color: var(--gray-400);
+  font-size: 0.8125rem;
+  padding: 1rem 0;
+}
+
+.kb-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: var(--shadow-xs);
+  border: 1px solid var(--gray-100);
+  padding: 0.875rem;
+  cursor: grab;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.kb-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.kb-card:active {
+  cursor: grabbing;
+}
+
+.kb-card.dragging {
+  opacity: 0.5;
+}
+
+.kb-card__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.kb-card__crq {
+  font-weight: 700;
+  color: var(--gray-800);
+  font-size: 0.9375rem;
+  word-break: break-word;
+}
+
+.kb-card__cba {
+  font-size: 0.6875rem;
+  color: var(--gray-400);
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+.kb-card__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.75rem;
+  color: var(--gray-500);
+  margin-bottom: 0.6rem;
+}
+
+.kb-prog {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.kb-prog__bar {
+  flex: 1;
+  height: 6px;
+  background: var(--gray-200);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.kb-prog__fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.kb-prog__txt {
+  font-size: 0.6875rem;
+  color: var(--gray-500);
+  font-weight: 600;
+}
+
+.kb-card__foot {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.kb-card__sel {
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid var(--gray-200);
+  border-radius: 8px;
+  padding: 0.25rem 0.5rem;
+  background: #fff;
+  color: var(--gray-600);
+  cursor: pointer;
+}
+
 .step-hd {
   display: flex;
   align-items: flex-start;
@@ -2139,6 +2300,7 @@ const IC = {
   info:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r=".5" fill="currentColor"/></svg>`,
   disable:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>`,
   enable:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
+  kanban:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="12" y1="9" x2="12" y2="21"/></svg>`,
 };
 
 // ════════ STATE ════════
@@ -2214,6 +2376,11 @@ const API = {
     return r;
   },
 
+  setChecklistEstado(cid, est) {
+    Cache.invalidate('checklists');
+    return this.call('setChecklistEstado',{checklistId:cid, estado:est});
+  },
+
   assignStep(cid,sec,em) {
     Cache.invalidate('checklists');
     Cache.invalidate('assignments-' + cid);
@@ -2287,20 +2454,26 @@ const U = {
     const s=String(e||'').trim();
     const lower=s.toLowerCase();
 
-    if(lower.includes('pend') || lower.includes('sin iniciar') || lower.includes('sin empezar'))
-      return `<span class="badge b-pending"><span class="dot"></span>Pendiente</span>`;
-
-    if(lower.includes('curso') || lower.includes('activo'))
-      return `<span class="badge b-active"><span class="dot"></span>En curso</span>`;
-
-    if(lower.includes('revis') || lower.includes('review'))
-      return `<span class="badge b-review"><span class="dot"></span>En revisión</span>`;
+    if(lower==='' || lower.includes('borrador'))
+      return `<span class="badge b-gray"><span class="dot"></span>Borrador</span>`;
 
     if(lower.includes('bloq') || lower.includes('blocked'))
       return `<span class="badge b-danger"><span class="dot"></span>Bloqueado</span>`;
 
-    if(lower.includes('comp') || lower.includes('final') || lower.includes('cerr'))
-      return `<span class="badge b-info"><span class="dot"></span>Completado</span>`;
+    if(lower.includes('termin') || lower.includes('completado') || lower.includes('comp') || lower.includes('final') || lower.includes('cerr'))
+      return `<span class="badge b-info"><span class="dot"></span>Terminado</span>`;
+
+    if(lower.includes('en progreso') || lower.includes('activo'))
+      return `<span class="badge b-active"><span class="dot"></span>En progreso</span>`;
+
+    if(lower.includes('curso'))
+      return `<span class="badge b-active"><span class="dot"></span>En curso</span>`;
+
+    if(lower.includes('pend') || lower.includes('sin iniciar') || lower.includes('sin empezar'))
+      return `<span class="badge b-pending"><span class="dot"></span>Pendiente</span>`;
+
+    if(lower.includes('revis') || lower.includes('review'))
+      return `<span class="badge b-review"><span class="dot"></span>En revisión</span>`;
 
     if(lower.includes('sin novedad') || lower.includes('normal'))
       return `<span class="badge b-ok"><span class="dot"></span>OK</span>`;
@@ -2348,6 +2521,7 @@ const Shell = {
         {view:'reports', icon:'chart',     label:'Reportes'},
       ],
       'LIDER-TEAM':[
+        {view:'board',      icon:'kanban',    label:'Tablero'},
         {view:'cbas',       icon:'list',      label:'CBAs'},
         {view:'cba-form',   icon:'plus',      label:'Crear CBA'},
         {view:'chk-form',   icon:'newfile',   label:'Nuevo Checklist'},
@@ -2389,6 +2563,7 @@ const R = {
         case 'reports':    await V.reports(); break;
         case 'chk-form':   await V.chkForm(); break;
         case 'checklists': await V.checklists(); break;
+        case 'board':      await V.board(); break;
         case 'chk-editor': await V.chkEditor(p.sid,p.cid); break;
         default: mc.innerHTML=`<div class="card card__body"><p>Vista no encontrada.</p></div>`;
       }
@@ -3006,6 +3181,109 @@ const V = {
         </div>
       `).join('')}</div>`}
     `;
+  },
+
+  // ── Tablero Kanban (LIDER-TEAM) ──
+  async board(){
+    if(!S.isLider){
+      document.getElementById('main').innerHTML=`<div class="alert a-danger">${U.icon('info')} <div>No tienes acceso a este panel.</div></div>`;
+      return;
+    }
+    const mc=document.getElementById('main');
+    const r=await API.getMyChecklists();
+    if(r.status!=='ok'){
+      mc.innerHTML=`<div class="alert a-danger">${U.icon('info')} <div>${U.esc(r.message)}</div></div>`;return;
+    }
+    const checklists=r.checklists||[];
+    S.boardList=checklists;
+
+    // Progreso por checklist (con caché de getChecklistData)
+    const progs={};
+    for(const ch of checklists){
+      if(!ch.spreadsheetId||ch.spreadsheetId==='undefined'){ progs[ch.id]={done:0,total:0}; continue; }
+      try{
+        const d=await API.getChecklistData(ch.spreadsheetId);
+        let done=0,total=0;
+        (d.phases||[]).forEach(ph=>(ph.rows||[]).forEach(row=>{
+          const sec=String(row[0]||'').trim();
+          if(!sec.match(/^\d+\.\d+/)) return;
+          total++;
+          if(String(row[10]||'').trim()!=='') done++;
+        }));
+        progs[ch.id]={done,total};
+      }catch(_){ progs[ch.id]={done:0,total:0}; }
+    }
+
+    const cols=['Borrador','En Progreso','Terminado','Bloqueado'];
+    const colStyle={
+      'Borrador':    {dot:'var(--gray-400)',head:'var(--gray-600)'},
+      'En Progreso': {dot:'var(--primary)', head:'var(--primary-dk)'},
+      'Terminado':   {dot:'var(--ok)',      head:'var(--ok)'},
+      'Bloqueado':   {dot:'var(--danger)',  head:'var(--danger)'},
+    };
+    const grouped=cols.map(name=>({name,list:checklists.filter(ch=>Board.col(ch.estado)===name)}));
+    const optsAll=cols.map(o=>`<option value="${o}">${o}</option>`).join('');
+
+    let html=`
+      <div class="page-hd">
+        <div class="page-hd__left">
+          <div class="page-title">Tablero de Control</div>
+          <div class="page-sub">${checklists.length} tarea(s) · ${grouped.map(g=>`<strong style="color:${colStyle[g.name].head}">${g.name}: ${g.list.length}</strong>`).join(' · ')}</div>
+        </div>
+        <div class="page-hd__actions">
+          <button class="btn btn-primary" onclick="R.go('chk-form')">${U.icon('newfile')} <span class="label">Nuevo Checklist</span></button>
+        </div>
+      </div>
+      <div class="kb-board">`;
+
+    grouped.forEach(g=>{
+      const st=colStyle[g.name];
+      html+=`<div class="kb-col" data-col="${g.name}"
+          ondragover="event.preventDefault();this.classList.add('kb-over')"
+          ondragleave="this.classList.remove('kb-over')"
+          ondrop="Board.drop(event,'${g.name}')">
+        <div class="kb-col__hd" style="color:${st.head}">
+          <span class="kb-col__dot" style="background:${st.dot}"></span>
+          ${g.name}
+          <span class="kb-col__count">${g.list.length}</span>
+        </div>
+        <div class="kb-col__body">
+          ${g.list.length===0?`<div class="kb-empty">Sin tareas</div>`:g.list.map(ch=>{
+            const p=progs[ch.id]||{done:0,total:0};
+            const pct=p.total>0?Math.round((p.done/p.total)*100):0;
+            const cur=Board.col(ch.estado);
+            const opts=optsAll.replace(`<option value="${cur}">${cur}</option>`,`<option value="${cur}" selected>${cur}</option>`);
+            return `<div class="kb-card" draggable="true"
+                ondragstart="event.dataTransfer.setData('text/plain','${ch.id}');this.classList.add('dragging')"
+                ondragend="this.classList.remove('dragging')"
+                onclick="R.go('chk-editor',{sid:'${ch.spreadsheetId}',cid:'${ch.id}'})">
+              <div class="kb-card__top">
+                <span class="kb-card__crq">${U.esc(ch.crq)||'Sin CRQ'}</span>
+                <span class="kb-card__cba">${U.esc(ch.cbaId)}</span>
+              </div>
+              <div class="kb-card__meta">
+                <span>${U.icon('user',12)} ${U.esc(ch.creadoPor)}</span>
+                <span>${U.date(ch.fechaInicio)||'—'} → ${U.date(ch.fechaFin)||'—'}</span>
+              </div>
+              <div class="kb-prog">
+                <div class="kb-prog__bar"><div class="kb-prog__fill" style="width:${pct}%"></div></div>
+                <span class="kb-prog__txt">${p.done}/${p.total}</span>
+              </div>
+              <div class="kb-card__foot">
+                <select class="kb-card__sel" aria-label="Mover a"
+                  onclick="event.stopPropagation()"
+                  onchange="Board.move('${ch.id}',this.value)">
+                  ${opts}
+                </select>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    });
+
+    html+=`</div>`;
+    mc.innerHTML=html;
   },
 
   // ── Checklist Editor ──
@@ -3655,6 +3933,28 @@ const Checklists = {
   },
 };
 
+// ════════ TABLERO KANBAN ════════
+const Board = {
+  col(estado){
+    const s=String(estado||'').trim().toLowerCase();
+    if(s==='' || s.includes('borrador')) return 'Borrador';
+    if(s.includes('bloq')) return 'Bloqueado';
+    if(s.includes('comp')||s.includes('termin')||s.includes('cerr')) return 'Terminado';
+    return 'En Progreso';
+  },
+  async move(cid, col){
+    const r=await API.setChecklistEstado(cid, col);
+    if(r.status==='ok'){ U.toast(r.message); V.board(); }
+    else U.toast(r.message,'err');
+  },
+  drop(e, col){
+    e.preventDefault();
+    e.currentTarget.classList.remove('kb-over');
+    const cid=e.dataTransfer.getData('text/plain');
+    if(cid) Board.move(cid, col);
+  },
+};
+
 // ════════ INIT ════════
 async function init(){
   window.addEventListener('beforeunload',(e)=>{
@@ -3677,7 +3977,7 @@ async function init(){
     if(cr.status==='ok') S.cbas=cr.cbas;
     if(ar.status==='ok') S.areas=ar.areas;
 
-    const first={ADMIN:'cbas','LIDER-TEAM':'cbas',OPERADOR:'checklists'};
+    const first={ADMIN:'cbas','LIDER-TEAM':'board',OPERADOR:'checklists'};
     await R.go(first[S.user.rol]||'checklists');
   }catch(err){
     document.getElementById('authMsg').textContent='Error de inicialización: '+err;

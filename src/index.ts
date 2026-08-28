@@ -295,6 +295,8 @@ function processRequest(data: Record<string, unknown>): Record<string, unknown> 
       );
     case "getMyChecklists":
       return getMyChecklists();
+    case "setChecklistEstado":
+      return setChecklistEstado(data.checklistId as string, data.estado as string);
     case "assignStep":
       return assignStep(data.checklistId as string, data.pasoSec as string, data.email as string);
     case "getChecklistData":
@@ -1157,7 +1159,7 @@ function createChecklist(
         currentEmail,
         fechaInicio,
         fechaFin,
-        "Activo",
+        "Borrador",
         new Date().toISOString().split("T")[0],
       ]);
     });
@@ -1315,6 +1317,53 @@ function getMyChecklists(): Record<string, unknown> {
     return {
       status: "error",
       message: `Error al obtener checklists: ${error}`,
+    };
+  }
+}
+
+/**
+ * Cambia el estado de un checklist (mover tarjeta en el tablero). Solo LIDER-TEAM/ADMIN.
+ */
+function setChecklistEstado(checklistId: string, estado: string): Record<string, unknown> {
+  try {
+    const currentEmail = resolveCurrentEmail();
+    if (!isLiderTeamUser(currentEmail) && !isAdminUser(currentEmail)) {
+      return {
+        status: "error",
+        message: "Solo LIDER-TEAM o ADMIN pueden cambiar el estado",
+      };
+    }
+    const allowed = ["Borrador", "En Progreso", "Terminado", "Bloqueado"];
+    if (!allowed.includes(estado)) {
+      return {
+        status: "error",
+        message: "Estado no válido",
+      };
+    }
+    const sheet = getMasterSheet("CHECKLISTS_INDEX");
+    const data = sheet.getDataRange().getValues() as unknown[][];
+    let rowIdx = -1;
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === checklistId) {
+        rowIdx = i;
+        break;
+      }
+    }
+    if (rowIdx < 0) {
+      return {
+        status: "error",
+        message: "Checklist no encontrado",
+      };
+    }
+    sheet.getRange(rowIdx + 1, 8).setValue(estado);
+    return {
+      status: "ok",
+      message: `Checklist movido a "${estado}"`,
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message: `Error al cambiar estado: ${error}`,
     };
   }
 }
