@@ -662,6 +662,32 @@ textarea.fc {
   min-height: 40px;
 }
 
+.seg {
+  display: flex;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--gray-100);
+}
+
+.seg__btn {
+  flex: 1;
+  min-height: 44px;
+  border: none;
+  background: transparent;
+  color: var(--gray-600);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.seg__btn.is-on {
+  background: var(--primary);
+  color: #fff;
+}
+
 .btn .icon {
   flex-shrink: 0;
 }
@@ -2252,11 +2278,19 @@ body {
     <div class="modal__body">
       <div class="form-body">
         <div class="alert a-info" style="margin-bottom:14px">
-          <span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r=".5" fill="currentColor"/></svg></span>
-          <div>El técnico asignado recibirá un correo con el enlace al checklist.</div>
+          <span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></span>
+          <div>Se registra la asignación sin enviar correo electrónico.</div>
         </div>
         <p style="font-size:13px;color:var(--gray-600);margin-bottom:14px">Paso: <strong id="mAssignSec"></strong></p>
-        <div class="fg"><label class="fl">Email del técnico <span class="req">*</span></label><input type="email" class="fc" id="mAssignEmail" placeholder="tecnico@empresa.com" /></div>
+        <div class="seg" id="mAssignScope" style="margin-bottom:14px">
+          <button type="button" class="seg__btn is-on" data-scope="eq" onclick="Checklists.setScope('eq')">Mi equipo</button>
+          <button type="button" class="seg__btn" data-scope="all" onclick="Checklists.setScope('all')">Todos</button>
+        </div>
+        <div class="fg">
+          <label class="fl">Técnico asignado <span class="req">*</span></label>
+          <input type="text" class="fc" id="mAssignSearch" placeholder="Buscar por nombre o email…" oninput="Checklists.renderAssign()" style="margin-bottom:8px" />
+          <select class="fc" id="mAssignUser" size="8" style="height:auto"></select>
+        </div>
       </div>
     </div>
     <div class="modal__ft">
@@ -2308,6 +2342,10 @@ const S = {
   user: null, cbas: [], areas: [],
   editCBA: null, editChecklist: null,
   pendAssign: null,
+  assignScope: 'eq',
+  users: null,
+  boardShowAll: false,
+  boardList: [],
   evidence: {},        // key: "phase_rowIdx" → [{name,type,dataUrl}]
   get isAdmin(){ return this.user?.rol==='ADMIN' },
   get isLider(){ return this.user?.rol==='LIDER-TEAM' },
@@ -3197,9 +3235,20 @@ const V = {
     const checklists=r.checklists||[];
     S.boardList=checklists;
 
+    // Mostrar solo los creados en los últimos 2 meses (o todos si se activa "Ver todos")
+    const cutoff=Date.now()-60*24*3600*1000;
+    const recent=checklists.filter(ch=>{
+      const fc=String(ch.fechaCreacion||ch.fechaInicio||'').trim();
+      if(!fc||fc==='undefined'||fc==='null') return true;
+      const t=new Date(fc).getTime();
+      return isNaN(t)?true:t>=cutoff;
+    });
+    const shown=!S.boardShowAll?recent:checklists;
+    const hidden=checklists.length-shown.length;
+
     // Progreso por checklist (con caché de getChecklistData)
     const progs={};
-    for(const ch of checklists){
+    for(const ch of shown){
       if(!ch.spreadsheetId||ch.spreadsheetId==='undefined'){ progs[ch.id]={done:0,total:0}; continue; }
       try{
         const d=await API.getChecklistData(ch.spreadsheetId);
@@ -3221,16 +3270,17 @@ const V = {
       'Terminado':   {dot:'var(--ok)',      head:'var(--ok)'},
       'Bloqueado':   {dot:'var(--danger)',  head:'var(--danger)'},
     };
-    const grouped=cols.map(name=>({name,list:checklists.filter(ch=>Board.col(ch.estado)===name)}));
+    const grouped=cols.map(name=>({name,list:shown.filter(ch=>Board.col(ch.estado)===name)}));
     const optsAll=cols.map(o=>`<option value="${o}">${o}</option>`).join('');
 
     let html=`
       <div class="page-hd">
         <div class="page-hd__left">
           <div class="page-title">Tablero de Control</div>
-          <div class="page-sub">${checklists.length} tarea(s) · ${grouped.map(g=>`<strong style="color:${colStyle[g.name].head}">${g.name}: ${g.list.length}</strong>`).join(' · ')}</div>
+          <div class="page-sub">${shown.length} tarea(s) ${S.boardShowAll?'':`<strong style="color:var(--primary)">(últimos 2 meses)</strong>`} ${hidden>0&&!S.boardShowAll?`· ${hidden} más ver todo`:''} · ${grouped.map(g=>`<strong style="color:${colStyle[g.name].head}">${g.name}: ${g.list.length}</strong>`).join(' · ')}</div>
         </div>
         <div class="page-hd__actions">
+          <button class="btn btn-secondary" onclick="Board.toggleAll()">${S.boardShowAll?`Ver últimos 2 meses`:`Ver todos (${hidden})`}</button>
           <button class="btn btn-primary" onclick="R.go('chk-form')">${U.icon('newfile')} <span class="label">Nuevo Checklist</span></button>
         </div>
       </div>
@@ -3253,7 +3303,7 @@ const V = {
             const pct=p.total>0?Math.round((p.done/p.total)*100):0;
             const cur=Board.col(ch.estado);
             const opts=optsAll.replace(`<option value="${cur}">${cur}</option>`,`<option value="${cur}" selected>${cur}</option>`);
-            return `<div class="kb-card" draggable="true"
+            return `<div class="kb-card" draggable="true" data-id="${ch.id}"
                 ondragstart="event.dataTransfer.setData('text/plain','${ch.id}');this.classList.add('dragging')"
                 ondragend="this.classList.remove('dragging')"
                 onclick="R.go('chk-editor',{sid:'${ch.spreadsheetId}',cid:'${ch.id}'})">
@@ -3867,16 +3917,54 @@ const Checklists = {
     }
   },
 
-  openAssign(phase,ri,sec,curEmail){
+  async openAssign(phase,ri,sec,curEmail){
     S.pendAssign={phase,ri,sec};
+    S.assignScope='eq';
     document.getElementById('mAssignSec').textContent=sec;
-    document.getElementById('mAssignEmail').value=curEmail||'';
+    document.getElementById('mAssignSearch').value='';
+    await this._loadUsers();
+    this.renderAssign(curEmail);
     Mod.open('mAssign');
   },
 
+  async _loadUsers(){
+    if(S.users) return S.users;
+    const r=await API.getUsers();
+    S.users=(r.status==='ok'?r.users:[]);
+    return S.users;
+  },
+
+  setScope(s){
+    S.assignScope=s;
+    this.renderAssign();
+  },
+
+  async renderAssign(selEmail){
+    await this._loadUsers();
+    const scope=S.assignScope||'eq';
+    document.querySelectorAll('#mAssignScope .seg__btn').forEach(b=>b.classList.toggle('is-on',b.dataset.scope===scope));
+    const users=S.users||[];
+    const q=(document.getElementById('mAssignSearch').value||'').trim().toLowerCase();
+    const myArea=String(S.user?.area||'').toLowerCase();
+    const isMine=u=>String(u.area||'').toLowerCase()===myArea;
+    const list=users.filter(u=>{
+      if(String(u.activo)==='false'||u.activo===false) return false;
+      if(scope==='eq'&&!isMine(u)) return false;
+      if(q&&!u.email.toLowerCase().includes(q)&&!String(u.nombre||'').toLowerCase().includes(q)) return false;
+      return true;
+    });
+    const sel=document.getElementById('mAssignUser');
+    sel.innerHTML=(list.length===0
+      ? `<option value="">Sin técnicos disponibles</option>`
+      : list.map(u=>`<option value="${U.esc(u.email)}">${U.esc(u.nombre||u.email)} — ${U.esc(u.email)}</option>`).join(''));
+    if(selEmail&&list.some(u=>u.email.toLowerCase()===String(selEmail).toLowerCase())){
+      sel.value=selEmail;
+    }
+  },
+
   async confirmAssign(){
-    const email=document.getElementById('mAssignEmail').value.trim();
-    if(!email){U.toast('El email es requerido','err');return;}
+    const email=document.getElementById('mAssignUser').value;
+    if(!email){U.toast('Selecciona al técnico','err');return;}
     const {sec,phase,ri}=S.pendAssign;
     const {cid}=S.editChecklist;
     Mod.close('mAssign'); U.load(true);
@@ -3943,15 +4031,79 @@ const Board = {
     return 'En Progreso';
   },
   async move(cid, col){
-    const r=await API.setChecklistEstado(cid, col);
-    if(r.status==='ok'){ U.toast(r.message); V.board(); }
-    else U.toast(r.message,'err');
+    const card=document.querySelector(`.kb-card[data-id="${cid}"]`);
+    const item=(S.boardList||[]).find(c=>c.id===cid);
+    if(!card||!item){ V.board(); return; }
+    const from=this.col(item.estado);
+    if(from===col) return;
+    const srcBody=document.querySelector(`.kb-col[data-col="${from}"] .kb-col__body`);
+    const dstBody=document.querySelector(`.kb-col[data-col="${col}"] .kb-col__body`);
+    if(!srcBody||!dstBody) return;
+
+    // Movida optimista: mover la tarjeta y actualizar conteos al instante
+    dstBody.appendChild(card);
+    const sel=card.querySelector('.kb-card__sel');
+    if(sel) sel.value=col;
+    item.estado=col;
+    this._sync();
+
+    try{
+      const r=await API.setChecklistEstado(cid, col);
+      if(r.status==='ok'){ U.toast(r.message, 'ok', 1800); }
+      else {
+        // Revertir en caso de error
+        srcBody.appendChild(card);
+        if(sel) sel.value=from;
+        item.estado=from;
+        this._sync();
+        U.toast(r.message,'err');
+      }
+    }catch(e){
+      srcBody.appendChild(card);
+      if(sel) sel.value=from;
+      item.estado=from;
+      this._sync();
+      U.toast(String(e),'err');
+    }
   },
   drop(e, col){
     e.preventDefault();
     e.currentTarget.classList.remove('kb-over');
     const cid=e.dataTransfer.getData('text/plain');
     if(cid) Board.move(cid, col);
+  },
+  toggleAll(){
+    S.boardShowAll=!S.boardShowAll;
+    V.board();
+  },
+  _sync(){
+    const colMap={'Borrador':'var(--gray-600)','En Progreso':'var(--primary-dk)','Terminado':'var(--ok)','Bloqueado':'var(--danger)'};
+    document.querySelectorAll('.kb-col').forEach(colEl=>{
+      const name=colEl.dataset.col;
+      const body=colEl.querySelector('.kb-col__body');
+      const cards=body.querySelectorAll(':scope > .kb-card');
+      const cnt=colEl.querySelector('.kb-col__count');
+      if(cnt) cnt.textContent=cards.length;
+      let empty=body.querySelector('.kb-empty');
+      if(cards.length===0){
+        if(!empty){ empty=document.createElement('div'); empty.className='kb-empty'; empty.textContent='Sin tareas'; body.appendChild(empty); }
+      }else if(empty){ empty.remove(); }
+    });
+    // Recomponer el resumen del encabezado
+    const sub=document.querySelector('#main .page-sub');
+    const cols=['Borrador','En Progreso','Terminado','Bloqueado'];
+    if(sub){
+      const list=S.boardList||[];
+      const cutoff=Date.now()-60*24*3600*1000;
+      const count=!S.boardShowAll?list.filter(ch=>{
+        const fc=String(ch.fechaCreacion||ch.fechaInicio||'').trim();
+        if(!fc||fc==='undefined'||fc==='null') return true;
+        const t=new Date(fc).getTime();
+        return isNaN(t)?true:t>=cutoff;
+      }).length:list.length;
+      const parts=cols.map(n=>`<strong style="color:${colMap[n]}">${n}: ${list.filter(c=>Board.col(c.estado)===n).length}</strong>`);
+      sub.innerHTML=`${count} tarea(s) ${S.boardShowAll?'':`<strong style="color:var(--primary)">(últimos 2 meses)</strong>`} · ${parts.join(' · ')}`;
+    }
   },
 };
 

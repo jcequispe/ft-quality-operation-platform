@@ -1147,6 +1147,13 @@ function createChecklist(
       }
     });
 
+    // ── Hojas de soporte: Contacto, Servicio y Evidencias + carpeta de evidencias ──
+    try {
+      createChecklistSupportSheets_(newSpreadsheet, crq);
+    } catch (supportErr) {
+      console.log("Aviso: No se pudieron crear las hojas de soporte: " + supportErr);
+    }
+
     // Registrar en CHECKLISTS_INDEX
     const checklistId = `CHK-${crq}-${Math.random().toString(36).substr(2, 8).toUpperCase()}`;
 
@@ -1178,6 +1185,88 @@ function createChecklist(
   }
 }
 
+/** Carpeta padre de un archivo en Drive. */
+function parentFolderOf_(fileId: string): GoogleAppsScript.Drive.Folder {
+  const parents = DriveApp.getFileById(fileId).getParents();
+  return parents.hasNext() ? parents.next() : DriveApp.getRootFolder();
+}
+
+/** Nombre seguro para una carpeta de Drive. */
+function sanitizeFolderName_(name: string): string {
+  return String(name).replace(/[\\/:*?"<>|]/g, "_").slice(0, 80);
+}
+
+/**
+ * Añade las hojas de soporte del checklist (Contacto, Servicio y Evidencias)
+ * y crea la carpeta de Drive donde se almacenan las evidencias.
+ * Estructura basada en la plantilla Excel del equipo.
+ */
+function createChecklistSupportSheets_(
+  ss: GoogleAppsScript.Spreadsheet.Spreadsheet,
+  crq: string,
+): void {
+  const styleHeader = (sheet: GoogleAppsScript.Spreadsheet.Sheet, cols: number) => {
+    try {
+      const r = sheet.getRange(1, 1, 1, cols);
+      r.setBackground("#0e4d49").setFontColor("#ffffff").setFontWeight("bold").setFontSize(10);
+      sheet.setFrozenRows(1);
+      for (let c = 1; c <= cols; c++) {
+        sheet.setColumnWidth(c, 180);
+      }
+    } catch (_) {}
+  };
+
+  // ── Carpeta de evidencias en Drive ──
+  let folderUrl = "";
+  try {
+    const folder = parentFolderOf_(ss.getId()).createFolder(`Evidencias - ${sanitizeFolderName_(crq)}`);
+    PropertiesService.getScriptProperties().setProperty(`evFolder_${ss.getId()}`, folder.getId());
+    folderUrl = folder.getUrl();
+  } catch (e) {
+    console.log("Aviso: No se pudo crear carpeta de evidencias: " + e);
+  }
+
+  // ── Contacto ──
+  let sh = ss.getSheetByName("Contacto");
+  if (!sh) {
+    sh = ss.insertSheet("Contacto");
+    sh.appendRow(["Empresa", "Contacto", "Cargo", "Correo Electrónico", "Teléfono", "Notas"]);
+    styleHeader(sh, 6);
+  }
+
+  // ── Servicio (funcional y técnico) ──
+  sh = ss.getSheetByName("Servicio");
+  if (!sh) {
+    sh = ss.insertSheet("Servicio");
+    sh.appendRow(["Servicio", "Tipo (Funcional / Técnico)", "Responsable", "Fecha", "Resultado", "Observaciones"]);
+    styleHeader(sh, 6);
+  }
+
+  // ── Evidencias ──
+  sh = ss.getSheetByName("Evidencias");
+  if (!sh) {
+    sh = ss.insertSheet("Evidencias");
+    sh.appendRow(["Fecha/Hora", "Usuario", "Fase", "Paso", "Archivo", "Tipo"]);
+    try {
+      sh.getRange(1, 1, 1, 6).setBackground("#0e4d49").setFontColor("#ffffff").setFontWeight("bold").setFontSize(10);
+      sh.setColumnWidth(1, 160);
+      sh.setColumnWidth(2, 200);
+      sh.setColumnWidth(3, 160);
+      sh.setColumnWidth(4, 80);
+      sh.setColumnWidth(5, 340);
+      sh.setColumnWidth(6, 100);
+    } catch (_) {}
+  }
+  if (folderUrl) {
+    try {
+      sh.getRange(1, 8).setValue("Carpeta de evidencias:");
+      sh.getRange(1, 8).setFontWeight("bold").setFontSize(10);
+      sh.getRange(1, 9).setFormula(`=HYPERLINK("${folderUrl}","Abrir carpeta en Drive")`);
+      sh.getRange(1, 9).setFontSize(10);
+    } catch (_) {}
+  }
+}
+
 /**
  * Asigna un paso de un checklist a un técnico. RF-5.3/5.4
  * Comparte el spreadsheet con la persona y registra en ASIGNACIONES.
@@ -1203,7 +1292,6 @@ function assignStep(checklistId: string, pasoSec: string, email: string): Record
     }
 
     const spreadsheetId = String(checklistRow[3]);
-    const crq = String(checklistRow[1]);
 
     // RF-5.4: Compartir como editor si no lo era
     try {
@@ -1246,17 +1334,7 @@ function assignStep(checklistId: string, pasoSec: string, email: string): Record
       console.log("Aviso: No se pudo actualizar Equipo Técnico: " + ssErr);
     }
 
-    // RF-6.3: Notificar a la persona asignada
-    try {
-      sendNotification(
-        email.trim(),
-        `Nuevo paso asignado — CRQ ${crq}`,
-        `Se te ha asignado el paso ${pasoSec} del checklist de la CRQ ${crq}.\nAccede directamente aquí: https://docs.google.com/spreadsheets/d/${spreadsheetId}`
-      );
-    } catch (notifErr) {
-      console.log("Aviso: No se pudo enviar notificación: " + notifErr);
-    }
-
+    // Sin notificación por correo (se solicita no enviar emails)
     return {
       status: "ok",
       message: `Paso ${pasoSec} asignado a ${email}`,
@@ -1558,44 +1636,62 @@ function saveEvidence(
         "Fecha/Hora", "Usuario", "Fase", "Paso", "Archivo", "Tipo",
       ]);
       try {
-        evSheet.getRange(1, 1, 1, 6).setBackground("#4a86e8").setFontColor("#ffffff").setFontWeight("bold");
+        evSheet.getRange(1, 1, 1, 6).setBackground("#0e4d49").setFontColor("#ffffff").setFontWeight("bold");
         evSheet.setColumnWidth(1, 160);
         evSheet.setColumnWidth(2, 200);
         evSheet.setColumnWidth(3, 160);
         evSheet.setColumnWidth(4, 80);
-        evSheet.setColumnWidth(5, 220);
+        evSheet.setColumnWidth(5, 340);
         evSheet.setColumnWidth(6, 100);
       } catch (_) {}
     }
 
-    // Guardar el archivo en Google Drive (carpeta del spreadsheet padre)
+    // Guardar el archivo en Google Drive (carpeta de evidencias del checklist)
     let fileId = "";
     let fileUrl = "";
+    let crq = "";
+    let creadoPor = "";
     try {
+      // Obtener CRQ y creador del checklist
+      const indexData = getMasterSheet("CHECKLISTS_INDEX").getDataRange().getValues() as unknown[][];
+      for (let i = 1; i < indexData.length; i++) {
+        if (String(indexData[i][0]) === checklistId) {
+          crq = String(indexData[i][1]);
+          creadoPor = String(indexData[i][4]);
+          break;
+        }
+      }
+
       const blob = Utilities.newBlob(
         Utilities.base64Decode(cleanBase64),
         mimeType,
         fileName
       );
 
-      // Guardar en carpeta de Drive junto al checklist
-      const parentFolder = DriveApp.getFileById(spreadsheetId).getParents();
-      const folder = parentFolder.hasNext() ? parentFolder.next() : DriveApp.getRootFolder();
+      // Resolver la carpeta de evidencias (pre-creada al generar el checklist)
+      const props = PropertiesService.getScriptProperties();
+      let folder: GoogleAppsScript.Drive.Folder | null = null;
+      const cachedFolderId = props.getProperty(`evFolder_${spreadsheetId}`);
+      if (cachedFolderId) {
+        try { folder = DriveApp.getFolderById(cachedFolderId); } catch (_) { folder = null; }
+      }
+      if (!folder) {
+        const parent = parentFolderOf_(spreadsheetId);
+        const folderName = `Evidencias - ${sanitizeFolderName_(crq)}`;
+        const search = parent.getFoldersByName(folderName);
+        folder = search.hasNext() ? search.next() : parent.createFolder(folderName);
+        try { props.setProperty(`evFolder_${spreadsheetId}`, folder.getId()); } catch (_) {}
+      }
+
       const file = folder.createFile(blob);
       file.setName(`[${checklistId}] ${fase} - ${pasoSec} - ${fileName}`);
       fileId = file.getId();
       fileUrl = file.getUrl();
 
       // Compartir con el creador del checklist
-      try {
-        const indexData = getMasterSheet("CHECKLISTS_INDEX").getDataRange().getValues() as unknown[][];
-        for (let i = 1; i < indexData.length; i++) {
-          if (String(indexData[i][0]) === checklistId) {
-            file.addViewer(String(indexData[i][4]));
-            break;
-          }
-        }
-      } catch (_) {}
+      if (creadoPor) {
+        try { file.addViewer(creadoPor); } catch (_) {}
+      }
     } catch (driveErr) {
       console.log("Error guardando en Drive: " + driveErr);
       return { status: "error", message: "No se pudo guardar el archivo en Drive: " + driveErr };
@@ -1611,17 +1707,6 @@ function saveEvidence(
       fileUrl ? `=HYPERLINK("${fileUrl}","${fileName}")` : fileName,
       mimeType.startsWith("image/") ? "Imagen" : "Archivo",
     ]);
-
-    // Si es imagen, intentar insertarla como imagen en la celda
-    if (mimeType.startsWith("image/") && fileId) {
-      try {
-        const lastRow = evSheet.getLastRow();
-        const imageFormula = `=IMAGE("https://drive.google.com/uc?id=${fileId}&export=view",2)`;
-        evSheet.getRange(lastRow, 7).setFormula(imageFormula);
-        evSheet.setRowHeight(lastRow, 100);
-        evSheet.getRange(lastRow, 7, 1, 1).setNote(`Evidencia ${fase} - Paso ${pasoSec}`);
-      } catch (_) {}
-    }
 
     return {
       status: "ok",
@@ -1661,11 +1746,12 @@ function getChecklistAssignments(checklistId: string): Record<string, unknown> {
   }
 }
 
-/** Get all users from QPO-MASTER. Solo ADMIN. */
+/** Get all users from QPO-MASTER. ADMIN y LIDER-TEAM. */
 function getUsers(): Record<string, unknown> {
   try {
-    if (!isAdminUser(resolveCurrentEmail())) {
-      return { status: "error", message: "Solo administradores pueden ver usuarios" };
+    const email = resolveCurrentEmail();
+    if (!isAdminUser(email) && !isLiderTeamUser(email)) {
+      return { status: "error", message: "Solo administradores y líderes pueden ver usuarios" };
     }
     const sheet = getMasterSheet("USUARIOS");
     const data = sheet.getDataRange().getValues() as unknown[][];
