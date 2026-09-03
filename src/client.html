@@ -688,6 +688,12 @@ textarea.fc {
   color: #fff;
 }
 
+.seg--sm .seg__btn {
+  min-height: 36px;
+  padding: 0 0.75rem;
+  font-size: 0.8125rem;
+}
+
 .btn .icon {
   flex-shrink: 0;
 }
@@ -1578,6 +1584,34 @@ textarea.fc {
   color: var(--gray-400);
 }
 
+/* ────── HOJAS DE SOPORTE (CHECKLIST) ────── */
+.sup-grid { display:grid; gap:8px; margin-bottom:10px; align-items:center; }
+.sup-row-hd { font-weight:600; font-size:.8125rem; color:var(--gray-500); padding:0 2px 4px; }
+.sup-grid input {
+  width:100%; border:1px solid var(--gray-200); border-radius:8px;
+  padding:8px 12px; font-size:.875rem; font-family:var(--font);
+  background:#fff; color:var(--gray-800);
+}
+.sup-grid input:focus { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-lter); }
+.sup-grid input[readonly] { background:var(--gray-50); color:var(--gray-500); }
+.sup-tbl { width:100%; border-collapse:collapse; }
+.sup-tbl th {
+  position:sticky; top:0; z-index:1; background:var(--gray-50);
+  font-size:.72rem; text-transform:uppercase; letter-spacing:.04em;
+  color:var(--gray-500); font-weight:600; text-align:left;
+  padding:8px 10px; border-bottom:1px solid var(--gray-200); white-space:nowrap;
+}
+.sup-tbl td { padding:4px 6px; border-bottom:1px solid var(--gray-100); }
+.sup-tbl td input {
+  width:100%; min-width:110px; border:1px solid var(--gray-200); border-radius:6px;
+  padding:7px 10px; font-size:.84rem; font-family:var(--font);
+  background:#fff; color:var(--gray-800);
+}
+.sup-tbl td input:focus { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-lter); }
+.sup-tbl td input[readonly] { background:var(--gray-50); color:var(--gray-500); }
+.sup-wrap { overflow-x:auto; max-height:340px; overflow-y:auto; }
+.sup-actions { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+
 /* ────── ALERTS ────── */
 .alert {
   display: flex;
@@ -2466,6 +2500,25 @@ const API = {
     return r;
   },
 
+  async getSupportData(sid) {
+    const key = 'support-' + sid;
+    const cached = Cache.get(key);
+    if (cached) return cached;
+    const r = await this.call('getSupportData',{spreadsheetId:sid});
+    if (r?.status === 'ok') Cache.set(key, r, 300000);
+    return r;
+  },
+
+  saveSupportData(sid, datos) {
+    Cache.invalidate('support-' + sid);
+    return this.call('saveSupportData',{spreadsheetId:sid, datos});
+  },
+
+  migrateChecklistSheets() {
+    Cache.invalidate('checklists');
+    return this.call('migrateChecklistSheets');
+  },
+
   getUsers()               { return this.call('getUsers') },
   createUser(d)            { return this.call('createUser',d) },
   updateUser(d)            { return this.call('updateUser',d) },
@@ -2622,6 +2675,16 @@ const Ev = {
     return S.evidence[this.key(phase,row)] || [];
   },
 
+  type(phase, row){
+    return (S.evType||{})[this.key(phase,row)] || 'Técnica';
+  },
+
+  setType(phase, row, t){
+    if(!S.evType) S.evType={};
+    S.evType[this.key(phase,row)]=t;
+    this._refreshUI(phase, row);
+  },
+
   addFiles(phase, row, files){
     const k = this.key(phase,row);
     if(!S.evidence[k]) S.evidence[k]=[];
@@ -2636,6 +2699,7 @@ const Ev = {
       'RETORNO':          'POST INTERVENCIÓN',
     };
     const faseEvidencia = faseMap[phase] || phase;
+    const tipoSeleccionado = this.type(phase, row);
 
     // Buscar el sec del paso para la asociación
     const phaseData = (S.editChecklist?.phases||[]).find(p=>p.name===phase);
@@ -2646,14 +2710,14 @@ const Ev = {
       reader.onload = async e => {
         const dataUrl = e.target.result;
         // Guardar en memoria para previsualización inmediata
-        arr.push({ name:f.name, type:f.type, dataUrl, uploading:true, saved:false });
+        arr.push({ name:f.name, type:f.type, dataUrl, uploading:true, saved:false, tipo:tipoSeleccionado });
         this._refreshUI(phase, row);
 
         // Guardar en Drive/Sheets en segundo plano sin bloquear UI
         if (sid && cid) {
           try {
             const base64 = dataUrl.split(',')[1] || dataUrl;
-            const r = await API.saveEvidence(sid, cid, faseEvidencia, pasoSec, f.name, f.type, base64);
+            const r = await API.saveEvidence(sid, cid, faseEvidencia, pasoSec, f.name, f.type, base64, tipoSeleccionado);
             // Marcar como guardado en el array en memoria
             const idx = arr.findIndex(x=>x.name===f.name&&x.uploading);
             if(idx>=0){
@@ -2727,6 +2791,7 @@ const Ev = {
     const key = `ev-${phase.replace(/[^a-z0-9]/gi,'_')}_${row}`;
     const imgs = files.filter(f=>this.isImage(f.type));
     const docs = files.filter(f=>!this.isImage(f.type));
+    const tipo = this.type(phase, row);
     return `
       <div class="evidence-section${hasFiles?' has-files':''}" id="${key}">
         <div class="evidence-hd">
@@ -2735,6 +2800,10 @@ const Ev = {
             <span>${hasFiles?`${files.length} evidencia(s)`:'Adjuntar evidencia'}</span>
           </div>
           <div class="evidence-actions">
+            <div class="seg seg--sm" style="margin-right:8px">
+              <button type="button" class="seg__btn ${tipo==='Técnica'?'is-on':''}" onclick="Ev.setType('${phase}',${row},'Técnica')" title="Guardar en hoja Evidencia Técnica">Técnica</button>
+              <button type="button" class="seg__btn ${tipo==='Funcional'?'is-on':''}" onclick="Ev.setType('${phase}',${row},'Funcional')" title="Guardar en hoja Evidencia Funcional">Funcional</button>
+            </div>
             <button class="btn btn-secondary btn--xs" onclick="Ev.openCamera('${phase}',${row})" title="Tomar foto">
               ${U.icon('camera',13)} <span class="label">Cámara</span>
             </button>
@@ -3158,6 +3227,7 @@ const V = {
         </div>
         <div class="page-hd__actions">
           ${S.isLider?`<button class="btn btn-primary" onclick="R.go('chk-form')">${U.icon('newfile')} <span class="label">Nuevo</span></button>`:''}
+          ${S.isAdmin?`<button class="btn btn-secondary" onclick="Checklists.migrate()" title="Agrega las 6 hojas de la plantilla a los checklists ya creados">${U.icon('steps')} <span class="label">Migrar hojas</span></button>`:''}
         </div>
       </div>
       ${list.length===0?`<div class="empty">${U.icon('checklist',40)}<h3>Sin checklists${S.isLider?'':' asignados'}</h3>${S.isLider?`<div style="margin-top:16px"><button class="btn btn-primary" onclick="R.go('chk-form')">Crear primer Checklist</button></div>`:''}</div>`:`
@@ -3343,14 +3413,16 @@ const V = {
       mc.innerHTML=`<div class="alert a-danger">${U.icon('info')} <div>ID de spreadsheet no válido.</div></div>`;return;
     }
     S.evidence = {};
-    const [dr, ar] = await Promise.all([
+    const [dr, ar, sr] = await Promise.all([
       API.getChecklistData(sid),
       API.getChecklistAssignments(cid),
+      API.getSupportData(sid),
     ]);
     if(dr.status!=='ok'){
       mc.innerHTML=`<div class="alert a-danger">${U.icon('info')} <div>${U.esc(dr.message)}</div></div>`;return;
     }
     S.editChecklist={sid,cid,crq:dr.crq||'',phases:dr.phases,assignments:ar.status==='ok'?ar.assignments:{}};
+    S.supportData = sr.status==='ok' ? sr : null;
     S.editDirty=false;
     V._renderEditor();
   },
@@ -3435,6 +3507,8 @@ const V = {
         ${U.icon('info')}
         <div>Como Líder puedes <strong>asignar</strong> cada paso y editar cualquier campo. Usa "Guardar todo" para guardar todos los cambios.</div>
       </div>`}
+
+      ${Checklists._supportHtml()}
     `;
 
     (phases||[]).forEach(phase=>{
@@ -3915,6 +3989,161 @@ const Checklists = {
       U.toast(String(e), 'err');
       if (btn) { btn.disabled = false; btn.innerHTML = `Guardar este paso`; }
     }
+  },
+
+  /* ── Hojas de soporte del checklist (Contactos, Servicios, Listado) ── */
+  _supportData(){
+    const ec=S.editChecklist;
+    if(ec.support) return ec.support;
+    const src=(S.supportData||{contactos:[],servicios:[],listado:[]});
+    return {contactos:src.contactos||[],servicios:src.servicios||[],listado:src.listado||[]};
+  },
+
+  _supportHtml(){
+    const isLider=S.isAL;
+    const sup=this._supportData();
+    const canEdit=isLider;
+    const noEdit=canEdit?'':' readonly disabled';
+    const ladCols=[
+      'Cód','Área','Tipología de Cambio','Tipo cambio Europa','Tipo cambio América',
+      'CBA homologada?','Cookbook homologado?','CBA (QUA%)','Europa L04','América L04',
+      'Europa L05','América L05','Cookbook EUR','Cookbook AME','CBA','CookBook','URL','CBA / CooBook',
+    ];
+
+    // ── Lista de contactos ──
+    const conRows=sup.contactos||[];
+    let conHtml=canEdit?`<div class="sup-grid sup-row-hd" style="grid-template-columns:1fr 1fr 40px"><div>Nombre</div><div>Teléfono</div><div></div></div>`:'';
+    conRows.forEach((r,i)=>{
+      conHtml+=`<div class="sup-grid" style="grid-template-columns:1fr 1fr 40px">
+        <input value="${U.esc(String(r[0]||''))}" data-sk="con" data-i="${i}" data-c="0"${noEdit} placeholder="Nombre del contacto">
+        <input value="${U.esc(String(r[1]||''))}" data-sk="con" data-i="${i}" data-c="1"${noEdit} placeholder="Teléfono">
+        ${canEdit?`<button class="btn btn-danger btn--xs btn--icon" onclick="Checklists.supportRm('con',${i})" title="Quitar">${U.icon('trash',13)}</button>`:''}
+      </div>`;
+    });
+    if(canEdit) conHtml+=`<button class="btn btn-secondary btn--xs" onclick="Checklists.supportAdd('con')">${U.icon('plus',13)} Agregar contacto</button>`;
+    else if(!conRows.length) conHtml=`<div style="font-size:.875rem;color:var(--gray-400)">Sin contactos registrados.</div>`;
+
+    // ── Servicios afectados ──
+    const serRows=sup.servicios||[];
+    let serHtml=canEdit?`<div class="sup-grid sup-row-hd" style="grid-template-columns:1fr 40px"><div>Nombre del SERVICIO</div><div></div></div>`:'';
+    serRows.forEach((s,i)=>{
+      serHtml+=`<div class="sup-grid" style="grid-template-columns:1fr 40px">
+        <input value="${U.esc(String(s))}" data-sk="ser" data-i="${i}"${noEdit} placeholder="Servicio afectado">
+        ${canEdit?`<button class="btn btn-danger btn--xs btn--icon" onclick="Checklists.supportRm('ser',${i})" title="Quitar">${U.icon('trash',13)}</button>`:''}
+      </div>`;
+    });
+    if(canEdit) serHtml+=`<button class="btn btn-secondary btn--xs" onclick="Checklists.supportAdd('ser')">${U.icon('plus',13)} Agregar servicio</button>`;
+    else if(!serRows.length) serHtml=`<div style="font-size:.875rem;color:var(--gray-400)">Sin servicios registrados.</div>`;
+
+    // ── Listado CookBook ──
+    const ladRows=sup.listado||[];
+    let ladHtml='';
+    if(canEdit||ladRows.length){
+      ladHtml=`<div class="sup-wrap"><table class="sup-tbl"><thead><tr>${
+        ladCols.map(c=>`<th>${U.esc(c)}</th>`).join('')
+      }</tr></thead><tbody>${
+        ladRows.map((r,i)=>`<tr>${
+          ladCols.map((_,c)=>`<td><input value="${U.esc(String(r[c]||''))}" data-sk="l" data-i="${i}" data-c="${c}"${noEdit}></td>`).join('')
+        }</tr>`).join('')
+      }</tbody></table></div>`;
+    }
+    if(canEdit){
+      ladHtml+=`<div class="sup-actions">
+        <button class="btn btn-secondary btn--xs" onclick="Checklists.supportAdd('l')">${U.icon('plus',13)} Agregar fila</button>
+        <button class="btn btn-primary btn--xs" onclick="Checklists.supportLoadCat()">${U.icon('steps',13)} Cargar desde catálogo CBAs</button>
+      </div>`;
+    } else if(!ladRows.length) ladHtml=`<div style="font-size:.875rem;color:var(--gray-400)">Catálogo vacío.</div>`;
+
+    const card=(title,ic,body,label)=>{
+      return `<div class="card">
+        <div class="card__hd">
+          <div class="card__title">${U.icon(ic,17)} ${title}</div>
+          ${canEdit?`<button class="btn btn-primary btn--xs" onclick="Checklists.supportSave('${label}')">${U.icon('save',13)} Guardar ${label==='con'?'Contactos':label==='ser'?'Servicios':'Catálogo'}</button>`:''}
+        </div>
+        <div class="card__body">${body}</div>
+      </div>`;
+    };
+
+    return `<div style="margin:1.5rem 0 .5rem">
+      <div style="font-weight:700;color:var(--gray-700);font-size:1.0625rem;margin-bottom:.75rem">Datos de soporte (se sincronizan con el sheet)</div>
+      ${card('Lista de contactos','users',conHtml,'con')}
+      ${card('Servicios afectados','building',serHtml,'ser')}
+      ${card('Listado CookBook','list',ladHtml,'l')}
+    </div>`;
+  },
+
+  supportAdd(kind){
+    const ec=S.editChecklist;
+    const sup=this._supportData();
+    if(kind==='con') sup.contactos.push(['','']);
+    else if(kind==='ser') sup.servicios.push('');
+    else sup.listado.push(Array(18).fill(''));
+    ec.support={...sup};
+    V._renderEditor();
+  },
+
+  supportRm(kind,i){
+    const ec=S.editChecklist;
+    const sup=this._supportData();
+    if(kind==='con') sup.contactos.splice(i,1);
+    if(kind==='ser') sup.servicios.splice(i,1);
+    if(kind==='l') sup.listado.splice(i,1);
+    ec.support={...sup};
+    V._renderEditor();
+  },
+
+  supportLoadCat(){
+    const rows=(S.cbas||[]).filter(c=>c&&c.id).map(c=>[
+      c.codigoArea||'',c.areaTecnica||'',c.nombreCBA||'',
+      '','','','','','','','','','','',
+      c.id||'',c.numeroCookbok||'',c.urlCBA||'',
+      `${c.codificacionTipologia||''} ${c.nombreCBA||''}`.trim(),
+    ]);
+    if(!rows.length){ U.toast('No hay CBAs en el catálogo','err'); return; }
+    const ec=S.editChecklist;
+    const sup=this._supportData();
+    sup.listado=rows;
+    ec.support={...sup};
+    V._renderEditor();
+    U.toast(`${rows.length} CBAs cargadas al Listado CookBook`);
+  },
+
+  async supportSave(kind){
+    const ec=S.editChecklist;
+    const read=(sk)=>{
+      const out=[];
+      document.querySelectorAll(`[data-sk="${sk}"]`).forEach(inp=>{
+        const i=+inp.dataset.i;
+        if(sk==='ser'){ out[i]=inp.value||''; return; }
+        const c=+inp.dataset.c;
+        if(!out[i]) out[i]=[];
+        out[i][c]=inp.value||'';
+      });
+      return out;
+    };
+    const contactos=(read('con')||[]).map(r=>[r?.[0]||'',r?.[1]||'']);
+    const servicios=read('ser')||[];
+    const listado=read('l')||[];
+    U.load(true);
+    try{
+      const r=await API.saveSupportData(ec.sid,{contactos,servicios,listado});
+      if(r.status==='ok'){
+        ec.support={contactos,servicios,listado};
+        if(S.supportData){ const c=Cache.get('support-'+ec.sid); if(c) Cache.invalidate('support-'+ec.sid); }
+        U.toast(r.message);
+      } else U.toast(r.message,'err');
+    }catch(e){ U.toast(String(e),'err'); }
+    U.load(false);
+  },
+
+  async migrate(){
+    U.load(true);
+    try{
+      const r=await API.migrateChecklistSheets();
+      U.toast(r.status==='ok'?r.message:(r.message||'Error'),r.status==='ok'?'': 'err');
+      V.checklists();
+    }catch(e){ U.toast(String(e),'err'); }
+    U.load(false);
   },
 
   async openAssign(phase,ri,sec,curEmail){

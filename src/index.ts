@@ -317,6 +317,12 @@ function processRequest(data: Record<string, unknown>): Record<string, unknown> 
       return getReportData();
     case "getChecklistAssignments":
       return getChecklistAssignments(data.checklistId as string);
+    case "getSupportData":
+      return getSupportData(data.spreadsheetId as string);
+    case "saveSupportData":
+      return saveSupportData(data.spreadsheetId as string, data.datos as Record<string, unknown>);
+    case "migrateChecklistSheets":
+      return migrateChecklistSheets();
     case "saveStepResult":
       return saveStepResult(
         data.spreadsheetId as string,
@@ -335,7 +341,8 @@ function processRequest(data: Record<string, unknown>): Record<string, unknown> 
         data.pasoSec as string,
         data.fileName as string,
         data.mimeType as string,
-        data.base64Data as string
+        data.base64Data as string,
+        data.tipo as string
       );
     default:
       return {
@@ -943,7 +950,7 @@ function createChecklist(
     // Crear nuevo spreadsheet
     const newSpreadsheet = SpreadsheetApp.create(`Checklist_${crq}_${new Date().getTime()}`);
     const sheet = newSpreadsheet.getSheets()[0];
-    sheet.setName("Checklist");
+    sheet.setName("CBA Procedimiento y checklist");
     const spreadsheetId = newSpreadsheet.getId();
 
     try {
@@ -1197,9 +1204,9 @@ function sanitizeFolderName_(name: string): string {
 }
 
 /**
- * Añade las hojas de soporte del checklist (Contacto, Servicio y Evidencias)
- * y crea la carpeta de Drive donde se almacenan las evidencias.
- * Estructura basada en la plantilla Excel del equipo.
+ * Añade las hojas de soporte del checklist replicando la plantilla Excel del equipo:
+ * Lista de contactos, Servicios afectados, Evidencia Técnica y Evidencia Funcional.
+ * Además crea la carpeta de Drive donde se almacenan las evidencias.
  */
 function createChecklistSupportSheets_(
   ss: GoogleAppsScript.Spreadsheet.Spreadsheet,
@@ -1207,64 +1214,99 @@ function createChecklistSupportSheets_(
 ): void {
   const styleHeader = (sheet: GoogleAppsScript.Spreadsheet.Sheet, cols: number) => {
     try {
-      const r = sheet.getRange(1, 1, 1, cols);
-      r.setBackground("#0e4d49").setFontColor("#ffffff").setFontWeight("bold").setFontSize(10);
+      sheet.getRange(1, 1, 1, cols)
+        .setBackground("#0e4d49").setFontColor("#ffffff").setFontWeight("bold").setFontSize(10);
       sheet.setFrozenRows(1);
       for (let c = 1; c <= cols; c++) {
-        sheet.setColumnWidth(c, 180);
+        sheet.setColumnWidth(c, 220);
       }
     } catch (_) {}
   };
 
-  // ── Carpeta de evidencias en Drive ──
+  // ── Carpeta de evidencias en Drive (reutiliza si ya existe) ──
   let folderUrl = "";
   try {
-    const folder = parentFolderOf_(ss.getId()).createFolder(`Evidencias - ${sanitizeFolderName_(crq)}`);
+    const parent = parentFolderOf_(ss.getId());
+    const folderName = `Evidencias - ${sanitizeFolderName_(crq)}`;
+    const existing = parent.getFoldersByName(folderName);
+    const folder = existing.hasNext() ? existing.next() : parent.createFolder(folderName);
     PropertiesService.getScriptProperties().setProperty(`evFolder_${ss.getId()}`, folder.getId());
     folderUrl = folder.getUrl();
   } catch (e) {
     console.log("Aviso: No se pudo crear carpeta de evidencias: " + e);
   }
 
-  // ── Contacto ──
-  let sh = ss.getSheetByName("Contacto");
-  if (!sh) {
-    sh = ss.insertSheet("Contacto");
-    sh.appendRow(["Empresa", "Contacto", "Cargo", "Correo Electrónico", "Teléfono", "Notas"]);
-    styleHeader(sh, 6);
-  }
-
-  // ── Servicio (funcional y técnico) ──
-  sh = ss.getSheetByName("Servicio");
-  if (!sh) {
-    sh = ss.insertSheet("Servicio");
-    sh.appendRow(["Servicio", "Tipo (Funcional / Técnico)", "Responsable", "Fecha", "Resultado", "Observaciones"]);
-    styleHeader(sh, 6);
-  }
-
-  // ── Evidencias ──
-  sh = ss.getSheetByName("Evidencias");
-  if (!sh) {
-    sh = ss.insertSheet("Evidencias");
-    sh.appendRow(["Fecha/Hora", "Usuario", "Fase", "Paso", "Archivo", "Tipo"]);
+  // Enlace a la carpeta en la fila 1 de cada hoja de evidencias
+  const evFolderCell = (sheet: GoogleAppsScript.Spreadsheet.Sheet, label: string) => {
+    if (!folderUrl) return;
     try {
-      sh.getRange(1, 1, 1, 6).setBackground("#0e4d49").setFontColor("#ffffff").setFontWeight("bold").setFontSize(10);
-      sh.setColumnWidth(1, 160);
-      sh.setColumnWidth(2, 200);
-      sh.setColumnWidth(3, 160);
-      sh.setColumnWidth(4, 80);
-      sh.setColumnWidth(5, 340);
-      sh.setColumnWidth(6, 100);
+      sheet.getRange(1, 1).setValue(`${label}:`);
+      sheet.getRange(1, 1).setFontWeight("bold").setFontSize(10);
+      sheet.getRange(1, 2).setFormula(`=HYPERLINK("${folderUrl}","Abrir carpeta en Drive")`);
+      sheet.getRange(1, 2).setFontSize(10);
+    } catch (_) {}
+  };
+
+  // ── Listado CookBook (catálogo de referencia de la plantilla Excel) ──
+  sh = ss.getSheetByName("Listado CookBook");
+  if (!sh) {
+    sh = ss.insertSheet("Listado CookBook");
+    sh.appendRow([
+      "", // A
+      "Cód", "Área", "Tipología de Cambio", // B C D
+      "Tipo de cambio Europa", "Tipo de cambio América", // E F
+      "Existe CBA homologada?", "¿Existe cookbook homologado?", // G H
+      "CBA (QUA%)", // I
+      "Europa (Candidatas a L04)", "América (Candidatas a L04)", // J K
+      "Europa (Candidatas a L05)", "América (Candidatas a L05)", // L M
+      "Cookbook Level EUR", "Cookbook Level AME", // N O
+      "CBA", "CookBook", "URL", "CBA / CooBook", // P Q R S
+      "", // T
+    ]);
+    try {
+      const r = sh.getRange(1, 1, 1, 20);
+      r.setBackground("#0e4d49").setFontColor("#ffffff").setFontWeight("bold").setFontSize(10);
+      sh.setFrozenRows(1);
+      sh.setColumnWidth(1, 60);
+      for (let c = 2; c <= 20; c++) sh.setColumnWidth(c, 150);
     } catch (_) {}
   }
-  if (folderUrl) {
-    try {
-      sh.getRange(1, 8).setValue("Carpeta de evidencias:");
-      sh.getRange(1, 8).setFontWeight("bold").setFontSize(10);
-      sh.getRange(1, 9).setFormula(`=HYPERLINK("${folderUrl}","Abrir carpeta en Drive")`);
-      sh.getRange(1, 9).setFontSize(10);
-    } catch (_) {}
+
+  // ── Lista de contactos ──
+  let sh = ss.getSheetByName("Lista de contactos");
+  if (!sh) {
+    sh = ss.insertSheet("Lista de contactos");
+    sh.appendRow(["Nombre", "Teléfono"]);
+    styleHeader(sh, 2);
   }
+
+  // ── Servicios afectados ──
+  sh = ss.getSheetByName("Servicios afectados");
+  if (!sh) {
+    sh = ss.insertSheet("Servicios afectados");
+    sh.appendRow(["Nombre del SERVICIO"]);
+    styleHeader(sh, 1);
+  }
+
+  // ── Evidencia Técnica y Evidencia Funcional ──
+  // Filas 4+ con columnas por fase (estructura de la plantilla Excel)
+  const evPhases = ["PRE INTERVENCIÓN", "DURANTE (Si Aplica)", "POST INTERVENCIÓN"];
+  ["Evidencia Técnica", "Evidencia Funcional"].forEach((name) => {
+    sh = ss.getSheetByName(name);
+    if (!sh) {
+      sh = ss.insertSheet(name);
+      evFolderCell(sh, name);
+      try {
+        sh.getRange(4, 1).setValue(evPhases[0]);
+        sh.getRange(4, 2).setValue(evPhases[1]);
+        sh.getRange(4, 3).setValue(evPhases[2]);
+        sh.getRange(4, 1, 1, 3).setBackground("#0e4d49").setFontColor("#ffffff").setFontWeight("bold").setFontSize(10);
+        sh.setColumnWidth(1, 340);
+        sh.setColumnWidth(2, 340);
+        sh.setColumnWidth(3, 340);
+      } catch (_) {}
+    }
+  });
 }
 
 /**
@@ -1603,18 +1645,19 @@ function saveChecklistData(spreadsheetId: string, data: Record<string, unknown>)
 }
 
 /**
- * Guarda evidencias fotográficas en la pestaña "Evidencias" del spreadsheet.
- * Las evidencias se insertan como imágenes en la columna correspondiente a su fase.
- * Cada imagen queda asociada a: checklist + fase + paso + usuario + timestamp.
+ * Guarda evidencias fotográficas en la carpeta de Drive del checklist y
+ * registra el enlace en la hoja Evidencia Técnica o Evidencia Funcional,
+ * en la columna de la fase correspondiente (estructura de la plantilla Excel).
  */
 function saveEvidence(
   spreadsheetId: string,
   checklistId: string,
-  fase: string,         // "PRE-INTERVENCIÓN" | "DURANTE" | "POST-INTERVENCIÓN"
+  fase: string,         // "PRE INTERVENCIÓN" | "DURANTE (Si Aplica)" | "POST INTERVENCIÓN"
   pasoSec: string,
   fileName: string,
   mimeType: string,
-  base64Data: string    // dataUrl sin el prefijo "data:...;base64,"
+  base64Data: string,   // dataUrl sin el prefijo "data:...;base64,"
+  tipo?: string,        // "Técnica" | "Funcional"
 ): Record<string, unknown> {
   try {
     const currentEmail = resolveCurrentEmail();
@@ -1626,23 +1669,31 @@ function saveEvidence(
 
     const ss = SpreadsheetApp.openById(spreadsheetId);
 
-    // Crear o encontrar la pestaña "Evidencias"
-    let evSheet = ss.getSheetByName("Evidencias");
-    if (!evSheet) {
-      evSheet = ss.insertSheet("Evidencias");
+    // Hoja destino según el tipo de evidencia (Técnica | Funcional)
+    const tipoNorm = String(tipo || "Técnica").toUpperCase().includes("FUNC")
+      ? "Funcional"
+      : "Técnica";
+    const sheetName = `Evidencia ${tipoNorm}`;
 
-      // Encabezados de la pestaña Evidencias (estructura del Excel)
-      evSheet.appendRow([
-        "Fecha/Hora", "Usuario", "Fase", "Paso", "Archivo", "Tipo",
-      ]);
+    // Crear o encontrar la hoja de evidencias (estructura de la plantilla Excel)
+    const evPhases = ["PRE INTERVENCIÓN", "DURANTE (Si Aplica)", "POST INTERVENCIÓN"];
+    const faseNorm = String(fase || "").toUpperCase().replace(/\s+/g, " ");
+    let colIdx = evPhases.findIndex((p) => faseNorm.includes(p.split(" ")[0])
+      || p.toUpperCase() === faseNorm
+      || faseNorm.includes(p.split("(")[0].trim()));
+    if (colIdx < 0) colIdx = 2; // POST INTERVENCIÓN por defecto
+
+    let evSheet = ss.getSheetByName(sheetName);
+    if (!evSheet) {
+      evSheet = ss.insertSheet(sheetName);
       try {
-        evSheet.getRange(1, 1, 1, 6).setBackground("#0e4d49").setFontColor("#ffffff").setFontWeight("bold");
-        evSheet.setColumnWidth(1, 160);
-        evSheet.setColumnWidth(2, 200);
-        evSheet.setColumnWidth(3, 160);
-        evSheet.setColumnWidth(4, 80);
-        evSheet.setColumnWidth(5, 340);
-        evSheet.setColumnWidth(6, 100);
+        evSheet.getRange(4, 1).setValue(evPhases[0]);
+        evSheet.getRange(4, 2).setValue(evPhases[1]);
+        evSheet.getRange(4, 3).setValue(evPhases[2]);
+        evSheet.getRange(4, 1, 1, 3).setBackground("#0e4d49").setFontColor("#ffffff").setFontWeight("bold").setFontSize(10);
+        evSheet.setColumnWidth(1, 340);
+        evSheet.setColumnWidth(2, 340);
+        evSheet.setColumnWidth(3, 340);
       } catch (_) {}
     }
 
@@ -1697,16 +1748,26 @@ function saveEvidence(
       return { status: "error", message: "No se pudo guardar el archivo en Drive: " + driveErr };
     }
 
-    // Registrar en la pestaña Evidencias del spreadsheet
+    // Registrar el enlace en la columna de la fase (fila libre bajo la cabecera)
     const timestamp = new Date().toLocaleString("es-PE", { timeZone: "America/Lima" });
-    evSheet.appendRow([
-      timestamp,
-      currentEmail,
-      fase,
-      pasoSec,
-      fileUrl ? `=HYPERLINK("${fileUrl}","${fileName}")` : fileName,
-      mimeType.startsWith("image/") ? "Imagen" : "Archivo",
-    ]);
+    try {
+      const colData = evSheet.getRange(5, colIdx + 1, evSheet.getMaxRows() - 4, 1).getValues() as unknown[][];
+      let targetRow = -1;
+      for (let i = 0; i < colData.length; i++) {
+        if (!String(colData[i][0] || "").trim()) { targetRow = 5 + i; break; }
+      }
+      if (targetRow < 0) targetRow = evSheet.getMaxRows() + 1;
+      const cell = evSheet.getRange(targetRow, colIdx + 1);
+      if (fileUrl) {
+        cell.setFormula(`=HYPERLINK("${fileUrl}","${fileName}")`);
+      } else {
+        cell.setValue(fileName);
+      }
+      cell.setNote(`${tipoNorm} · ${fase} · Paso ${pasoSec}\n${currentEmail}\n${timestamp}`);
+      try { evSheet.setRowHeight(targetRow, 60); } catch (_) {}
+    } catch (sheetErr) {
+      console.log("Aviso: No se pudo registrar el enlace en la hoja de evidencias: " + sheetErr);
+    }
 
     return {
       status: "ok",
@@ -1716,6 +1777,108 @@ function saveEvidence(
     };
   } catch (error) {
     return { status: "error", message: `Error al guardar evidencia: ${error}` };
+  }
+}
+
+/** Obtiene las filas de las hojas de soporte (Lista de contactos, Servicios
+ *  afectados y Listado CookBook) de un checklist, para editarlas desde el app. */
+function getSupportData(spreadsheetId: string): Record<string, unknown> {
+  try {
+    const ss = SpreadsheetApp.openById(spreadsheetId);
+
+    const readRows = (name: string, cols: number): unknown[][] => {
+      const sh = ss.getSheetByName(name);
+      if (!sh) return [];
+      const values = sh.getDataRange().getValues() as unknown[][];
+      const rows: unknown[][] = [];
+      for (let i = 1; i < values.length; i++) {
+        const r: unknown[] = [];
+        for (let c = 0; c < cols; c++) r.push(String(values[i][c] ?? ""));
+        if (r.some((v) => String(v).trim() !== "")) rows.push(r);
+      }
+      return rows;
+    };
+
+    return {
+      status: "ok",
+      contactos: readRows("Lista de contactos", 2),
+      servicios: readRows("Servicios afectados", 1).map((r) => r[0]),
+      listado: readRows("Listado CookBook", 18),
+    };
+  } catch (error) {
+    return { status: "error", message: `Error al obtener datos de soporte: ${error}` };
+  }
+}
+
+/** Guarda en las hojas de soporte del checklist lo editado desde el app. */
+function saveSupportData(spreadsheetId: string, datos: Record<string, unknown>): Record<string, unknown> {
+  try {
+    const ss = SpreadsheetApp.openById(spreadsheetId);
+
+    const writeRows = (name: string, startCol: number, cols: number, rows: unknown[][]): void => {
+      let sh = ss.getSheetByName(name);
+      if (!sh) {
+        sh = ss.insertSheet(name);
+        if (name === "Lista de contactos") {
+          sh.appendRow(["Nombre", "Teléfono"]);
+        } else if (name === "Servicios afectados") {
+          sh.appendRow(["Nombre del SERVICIO"]);
+        } else if (name === "Listado CookBook") {
+          sh.appendRow([
+            "", "Cód", "Área", "Tipología de Cambio", "Tipo de cambio Europa",
+            "Tipo de cambio América", "Existe CBA homologada?", "¿Existe cookbook homologado?",
+            "CBA (QUA%)", "Europa (Candidatas a L04)", "América (Candidatas a L04)",
+            "Europa (Candidatas a L05)", "América (Candidatas a L05)",
+            "Cookbook Level EUR", "Cookbook Level AME", "CBA", "CookBook", "URL",
+            "CBA / CooBook", "",
+          ]);
+        }
+        try {
+          sh.getRange(1, 1, 1, 20).setBackground("#0e4d49")
+            .setFontColor("#ffffff").setFontWeight("bold").setFontSize(10);
+          sh.setFrozenRows(1);
+        } catch (_) {}
+      }
+      const lastCol = Math.max(sh.getLastColumn() || 1, cols);
+      sh.getRange(2, 1, Math.max(sh.getMaxRows(), 2) - 1, lastCol).clearContent();
+      if (rows.length) sh.getRange(2, startCol, rows.length, cols).setValues(rows as string[][]);
+    };
+
+    writeRows("Lista de contactos", 1, 2, (datos.contactos as unknown[][]) || []);
+    writeRows("Servicios afectados", 1, 1, ((datos.servicios as string[]) || []).map((s) => [s]));
+    writeRows("Listado CookBook", 2, 18, (datos.listado as unknown[][]) || []);
+
+    return { status: "ok", message: "Datos de soporte guardados en el sheet" };
+  } catch (error) {
+    return { status: "error", message: `Error al guardar datos de soporte: ${error}` };
+  }
+}
+
+/** Migra los checklists ya creados para que tengan las 6 hojas de la
+ *  plantilla (Lista de contactos, Servicios afectados, Listado CookBook y
+ *  las hojas de Evidencia Técnica / Funcional) + carpeta de evidencias. */
+function migrateChecklistSheets(): Record<string, unknown> {
+  try {
+    const index = getMasterSheet("CHECKLISTS_INDEX").getDataRange().getValues() as unknown[][];
+    let ok = 0, fail = 0;
+    const fails: string[] = [];
+    for (let i = 1; i < index.length; i++) {
+      const spreadsheetId = String(index[i][3] || "");
+      const crq = String(index[i][1] || "");
+      if (!spreadsheetId) continue;
+      try {
+        const ss = SpreadsheetApp.openById(spreadsheetId);
+        createChecklistSupportSheets_(ss, crq);
+        ok++;
+      } catch (e) {
+        fail++;
+        fails.push(crq || spreadsheetId);
+      }
+    }
+    const msg = `Migración: ${ok} checklists actualizados` + (fail ? `, ${fail} fallaron (${fails.join(", ")})` : "");
+    return { status: "ok", message: msg };
+  } catch (error) {
+    return { status: "error", message: `Error al migrar: ${error}` };
   }
 }
 
