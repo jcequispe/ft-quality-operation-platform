@@ -2286,6 +2286,8 @@ body {
           </div>
           <div class="fg"><label class="fl">Área <span class="req">*</span></label><input type="text" class="fc" id="uArea" required /></div>
           <div class="fg"><label class="fl">Estado</label><input type="text" class="fc" id="uEstado" placeholder="ej: Activo" /></div>
+          <div class="fg"><label class="fl">Servicio N1</label><input type="text" class="fc" id="uServN1" placeholder="ej: CÓMPUTO DISTRIBUIDO" /></div>
+          <div class="fg"><label class="fl">Servicio N2</label><input type="text" class="fc" id="uServN2" placeholder="ej: LINUX" /></div>
           <div class="fg"><label class="fl">Activo <span class="req">*</span></label>
             <select class="fc" id="uActivo" required><option value="SI">Sí</option><option value="NO">No</option></select>
           </div>
@@ -2630,6 +2632,7 @@ const Shell = {
         {view:'users',      icon:'users',     label:'Mi Equipo'},
       ],
       OPERADOR:[
+        {view:'chk-form',   icon:'newfile',   label:'Nuevo Checklist'},
         {view:'checklists',icon:'checklist',label:'Mis Checklists'},
       ],
     };
@@ -2907,7 +2910,7 @@ const V = {
     html += `<div class="card" id="tblDesk">
       <div class="tbl-wrap"><table class="tbl">
         <thead><tr>
-          <th>ID</th><th>Área</th><th>Nombre CBA</th><th>Tipología</th><th>Madurez</th><th>Estado</th>
+          <th>ID</th><th>Área</th><th>Nombre CBA</th><th>Tipología</th><th>Servicio N1/N2</th><th>Madurez</th><th>Estado</th>
           ${S.isAL?'<th>Acciones</th>':''}
         </tr></thead>
         <tbody>
@@ -2916,6 +2919,7 @@ const V = {
             <td>${U.esc(c.areaTecnica||c.codigoArea)}</td>
             <td><strong>${U.esc(c.nombreCBA||'—')}</strong></td>
             <td style="color:var(--gray-500);font-size:12px">${U.esc(c.nombreTipologia||'—')}</td>
+            <td style="font-size:12px">${(c.servicioN1||c.servicioN2)?`${U.esc(c.servicioN1||'—')} / ${U.esc(c.servicioN2||'—')}`:'<span style="color:var(--gray-300)">—</span>'}</td>
             <td><span class="badge b-lider">${U.esc(c.madurez||'—')}</span></td>
             <td>${U.estadoBadge(c.estado)}</td>
             ${S.isAL?`<td>
@@ -3011,6 +3015,10 @@ const V = {
               <input class="fc" id="cTitulo" value="${v('tituloCatalogo')}" required /></div>
             <div class="fg span2"><label class="fl">URL del CBA</label>
               <input type="url" class="fc" id="cUrl" value="${v('urlCBA')}" placeholder="https://..." /></div>
+            <div class="fg"><label class="fl">Servicio N1</label>
+              <input class="fc" id="cServN1" value="${v('servicioN1')}" placeholder="ej: CÓMPUTO DISTRIBUIDO" /></div>
+            <div class="fg"><label class="fl">Servicio N2</label>
+              <input class="fc" id="cServN2" value="${v('servicioN2')}" placeholder="ej: LINUX" /></div>
           </div></div>
         </div>
 
@@ -3080,12 +3088,13 @@ const V = {
       </div>
       ${us.length===0?`<div class="empty">${U.icon('users',40)}<h3>Sin usuarios registrados</h3></div>`:`
       <div class="card"><div class="tbl-wrap"><table class="tbl">
-        <thead><tr><th>Email</th><th>Nombre</th><th>Rol</th><th>Área</th><th>Activo</th><th>Acciones</th></tr></thead>
+        <thead><tr><th>Email</th><th>Nombre</th><th>Rol</th><th>Área</th><th>Servicio N1/N2</th><th>Activo</th><th>Acciones</th></tr></thead>
         <tbody>${us.map(u=>`<tr>
           <td style="font-size:12px">${U.esc(u.email)}</td>
           <td><strong>${U.esc(u.nombre)}</strong></td>
           <td>${U.roleBadge(u.rol)}</td>
           <td style="font-size:12px">${U.esc(u.area)}</td>
+          <td style="font-size:12px">${(u.servicioN1||u.servicioN2)?`${U.esc(u.servicioN1||'—')} / ${U.esc(u.servicioN2||'—')}`:'<span style="color:var(--gray-300)">—</span>'}</td>
           <td>${u.activo?`<span class="badge b-ok"><span class="dot"></span>Activo</span>`:`<span class="badge b-gray">Inactivo</span>`}</td>
           <td><div class="btn-group">
             <button class="btn btn-secondary btn--sm btn--icon" onclick="Users.openForm(${JSON.stringify(u).replace(/"/g,'&quot;')})" title="Editar">${U.icon('edit')}</button>
@@ -3200,7 +3209,15 @@ const V = {
   async chkForm(){
     const mc=document.getElementById('main');
     const user=S.user;
-    const cbas=S.isAdmin?S.cbas:S.cbas.filter(c=>c.codigoArea===user.area||c.areaTecnica===user.area);
+    let cbas=S.isAdmin?S.cbas:S.cbas.filter(c=>c.codigoArea===user.area||c.areaTecnica===user.area);
+    // Si el LIDER-TEAM le asignó un Servicio N1/N2 al operador, acota aún más el
+    // catálogo a lo que realmente le corresponde a su equipo.
+    if(!S.isAL && (user.servicioN1||user.servicioN2)){
+      cbas=cbas.filter(c=>
+        (!user.servicioN1 || c.servicioN1===user.servicioN1) &&
+        (!user.servicioN2 || c.servicioN2===user.servicioN2)
+      );
+    }
     const cbasConPasos=cbas.filter(c=>c.estado&&(c.estado.includes('definidos')||c.estado==='Pasos definidos'));
     mc.innerHTML=`
       <div class="page-hd">
@@ -3334,7 +3351,7 @@ const V = {
               <button class="btn btn-primary btn--sm" onclick="R.go('chk-editor',{sid:'${c.spreadsheetId}',cid:'${c.id}'})">${U.icon('eye')} ${S.isLider?'Abrir':'Completar'}</button>
               ${(S.isLider||S.isAdmin)?`<button class="btn btn-secondary btn--sm btn--icon" onclick="window.open('https://docs.google.com/spreadsheets/d/${c.spreadsheetId}','_blank')" title="Ver en Drive">${U.icon('link')}</button>`:''}
             `:c.estado==='Creando...'?`<span style="font-size:12px;color:var(--gray-500)">Creando…</span>`:`<span style="font-size:12px;color:var(--danger)">Sin spreadsheet</span>`}
-            ${((S.isLider&&c.creadoPor.toLowerCase()===user.email.toLowerCase())||S.isAdmin)&&c.estado!=='Creando...'?`
+            ${(S.isLider||S.isAdmin)&&c.estado!=='Creando...'?`
               <button class="btn btn-danger btn--sm btn--icon" onclick="Checklists.del('${c.id}','${c.spreadsheetId}','${U.esc(c.crq)}')" title="Eliminar">${U.icon('trash')}</button>
             `:''}
           </div></td>
@@ -3371,7 +3388,7 @@ const V = {
               <button class="btn btn-primary" onclick="R.go('chk-editor',{sid:'${c.spreadsheetId}',cid:'${c.id}'})">${U.icon('eye')} ${S.isLider?'Abrir':'Completar'}</button>
               ${(S.isLider||S.isAdmin)?`<button class="btn btn-secondary" onclick="window.open('https://docs.google.com/spreadsheets/d/${c.spreadsheetId}','_blank')" title="Ver Drive">${U.icon('link')} Drive</button>`:''}
             `:''}
-            ${(S.isLider&&c.creadoPor.toLowerCase()===user.email.toLowerCase())||S.isAdmin?`
+            ${S.isLider||S.isAdmin?`
               <button class="btn btn-danger" onclick="Checklists.del('${c.id}','${c.spreadsheetId}','${U.esc(c.crq)}')">${U.icon('trash')} Borrar</button>
             `:''}
           </div>
@@ -3591,7 +3608,7 @@ const V = {
 
       ${!isLider?`<div class="alert a-info" style="margin-bottom:1.25rem">
         ${U.icon('info')}
-        <div>Solo puedes completar los pasos que te fueron <strong>asignados</strong>. Completa tus pasos y al final presiona <strong>"Guardar y Terminar"</strong>.</div>
+        <div>Puedes completar <strong>cualquier paso</strong> de este checklist (la asignación es solo organizativa). Al terminar presiona <strong>"Guardar y Terminar"</strong>.</div>
       </div>`:`<div class="alert a-info" style="margin-bottom:1.25rem">
         ${U.icon('info')}
         <div>Como Líder puedes <strong>asignar</strong> cada paso y editar cualquier campo. Usa "Guardar todo" para guardar todos los cambios.</div>
@@ -3830,6 +3847,8 @@ const CBAs = {
       candidataL05: document.getElementById('cL05').value,
       fechaIncorporacion: document.getElementById('cFecha').value,
       personaQO: document.getElementById('cPersonaQO').value,
+      servicioN1: document.getElementById('cServN1').value,
+      servicioN2: document.getElementById('cServN2').value,
     };
     U.load(true);
     try{
@@ -3910,6 +3929,8 @@ const Users = {
       document.getElementById('uRol').value=user.rol;
       document.getElementById('uArea').value=user.area;
       document.getElementById('uEstado').value=user.estado||'';
+      document.getElementById('uServN1').value=user.servicioN1||'';
+      document.getElementById('uServN2').value=user.servicioN2||'';
       document.getElementById('uActivo').value=user.activo?'SI':'NO';
     } else { document.getElementById('uEmail').readOnly=false; }
     // LIDER-TEAM solo puede registrar OPERADOR de su propia área — el backend lo
@@ -3931,6 +3952,8 @@ const Users = {
       rol:document.getElementById('uRol').value,
       area:document.getElementById('uArea').value.trim(),
       estado:document.getElementById('uEstado').value.trim(),
+      servicioN1:document.getElementById('uServN1').value.trim(),
+      servicioN2:document.getElementById('uServN2').value.trim(),
       activo:document.getElementById('uActivo').value==='SI',
     };
     U.load(true);

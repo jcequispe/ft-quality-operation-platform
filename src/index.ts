@@ -148,6 +148,8 @@ interface CBA {
   personaQO: string;
   estado: string;
   fechaCreacion: string;
+  servicioN1: string;
+  servicioN2: string;
   pasos?: {
     preIntervention: CBAStep[];
     intervention: CBAStep[];
@@ -175,6 +177,8 @@ interface CBANew {
   fechaIncorporacion: string;
   personaQO: string;
   estado?: string;
+  servicioN1: string;
+  servicioN2: string;
 }
 
 interface Area {
@@ -442,6 +446,8 @@ function getCurrentUser(): Record<string, unknown> {
           area: String(data[i][3]),
           estado: String(data[i][4]),
           activo: String(data[i][6]).toUpperCase() === "SI",
+          servicioN1: String(data[i][7] || ""),
+          servicioN2: String(data[i][8] || ""),
         };
 
         if (!user.activo) {
@@ -721,6 +727,8 @@ function getCBAs(): Record<string, unknown> {
         personaQO: String(row[16]),
         estado: String(row[17]),
         fechaCreacion: String(row[18]),
+        servicioN1: String(row[19] || ""),
+        servicioN2: String(row[20] || ""),
       });
     }
 
@@ -820,6 +828,8 @@ function createCBA(cba: CBANew): Record<string, unknown> {
         cba.personaQO,
         estado,
         new Date().toISOString().split("T")[0],
+        cba.servicioN1 || "",
+        cba.servicioN2 || "",
       ];
 
       sheet.appendRow(newRow);
@@ -899,6 +909,8 @@ function updateCBA(id: string, cba: CBANew): Record<string, unknown> {
             cba.personaQO,
             data[i][17], // mantener estado
             data[i][18], // mantener fecha creación
+            cba.servicioN1 || "",
+            cba.servicioN2 || "",
           ];
 
           sheet.getRange(i + 1, 1, 1, updateRow.length).setValues([updateRow]);
@@ -1031,7 +1043,9 @@ function deleteCBA(cbaId: string): Record<string, unknown> {
 
 /**
  * Create a new checklist based on a CBA template.
- * RF-5.1/5.2: Solo LIDER-TEAM puede crear checklists.
+ * RF-5.1/5.2: Cualquier usuario registrado (típicamente el OPERADOR/Change Executor)
+ * puede crear su propio checklist. El LIDER-TEAM ya no es requisito para crearlos —
+ * su rol es gestionar el equipo y a qué Servicio N1/N2 pertenece cada operador.
  *
  * La creación real (spreadsheet, formato, carpetas, hojas de soporte) tarda varios
  * segundos de I/O de Drive/Sheets que no se pueden acelerar más. En vez de bloquear al
@@ -1052,10 +1066,13 @@ function createChecklist(
   try {
     const currentEmail = resolveCurrentEmail();
 
-    if (!isLiderTeamUser(currentEmail) && !isAdminUser(currentEmail)) {
+    // El Change Executor (OPERADOR) es quien realmente ejecuta el cambio y genera su
+    // checklist — el LIDER-TEAM ya no es el único que puede crearlos, solo necesita
+    // estar registrado y activo en la plataforma.
+    if (!getUserRole(currentEmail)) {
       return {
         status: "error",
-        message: "Solo LIDER-TEAM puede crear checklists",
+        message: "Debes estar registrado en la plataforma para crear checklists",
       };
     }
 
@@ -1635,6 +1652,21 @@ function assignStep(checklistId: string, pasoSec: string, email: string): Record
 function getMyChecklists(): Record<string, unknown> {
   try {
     const currentEmail = resolveCurrentEmail().toLowerCase();
+    const isAdmin = isAdminUser(currentEmail);
+    const isLider = isLiderTeamUser(currentEmail);
+
+    // ADMIN ve todo; LIDER-TEAM ve todos los checklists de su área (no solo los que él
+    // mismo creó, ya que ahora es el OPERADOR/Change Executor quien los crea); OPERADOR
+    // solo ve los que creó o los que tiene asignados.
+    const myArea = isLider && !isAdmin ? getUserArea(currentEmail) : null;
+    let creatorsInMyArea: Set<string> | null = null;
+    if (myArea !== null) {
+      creatorsInMyArea = new Set<string>();
+      const usersData = getMasterSheet("USUARIOS").getDataRange().getValues() as unknown[][];
+      for (let i = 1; i < usersData.length; i++) {
+        if (String(usersData[i][3]) === myArea) creatorsInMyArea.add(String(usersData[i][0]).toLowerCase());
+      }
+    }
 
     const indexData = getMasterSheet("CHECKLISTS_INDEX").getDataRange().getValues() as unknown[][];
     const asignacionesData = getMasterSheet("ASIGNACIONES").getDataRange().getValues() as unknown[][];
@@ -1654,7 +1686,8 @@ function getMyChecklists(): Record<string, unknown> {
       const checklistId = String(row[0]);
       const creadoPor = String(row[4]).toLowerCase();
 
-      if (creadoPor !== currentEmail && !assignedChecklistIds.has(checklistId)) continue;
+      const visibleByArea = creatorsInMyArea !== null && creatorsInMyArea.has(creadoPor);
+      if (!isAdmin && creadoPor !== currentEmail && !assignedChecklistIds.has(checklistId) && !visibleByArea) continue;
 
       checklists.push({
         id: checklistId,
@@ -2203,6 +2236,8 @@ function getUsers(): Record<string, unknown> {
         area: String(row[3]),
         estado: String(row[4]),
         activo: String(row[6]).toUpperCase() === "SI",
+        servicioN1: String(row[7] || ""),
+        servicioN2: String(row[8] || ""),
       });
     }
 
@@ -2304,6 +2339,8 @@ function createUser(data: Record<string, unknown>): Record<string, unknown> {
         String(data.estado || ""),
         "",
         data.activo ? "SI" : "NO",
+        String(data.servicioN1 || ""),
+        String(data.servicioN2 || ""),
       ];
 
       sheet.appendRow(newRow);
@@ -2358,6 +2395,8 @@ function updateUser(data: Record<string, unknown>): Record<string, unknown> {
           sheet.getRange(i + 1, 4).setValue(data.area);
           sheet.getRange(i + 1, 5).setValue(data.estado);
           sheet.getRange(i + 1, 7).setValue(data.activo ? "SI" : "NO");
+          sheet.getRange(i + 1, 8).setValue(String(data.servicioN1 || ""));
+          sheet.getRange(i + 1, 9).setValue(String(data.servicioN2 || ""));
 
           return {
             status: "ok",
@@ -2409,9 +2448,14 @@ function deleteChecklist(checklistId: string, spreadsheetId: string): Record<str
                         (spreadsheetId && rowSpreadsheetId === spreadsheetId);
         if (!matches) continue;
 
-        // LIDER-TEAM solo puede eliminar los que creó
+        // LIDER-TEAM puede eliminar los que creó él mismo o cualquiera de su equipo
+        // (ahora el OPERADOR es quien crea la mayoría de los checklists).
         if (!isAdmin && creadoPor !== currentEmail.toLowerCase()) {
-          return { status: "error", message: "Solo puedes eliminar checklists que creaste" };
+          const myArea = getUserArea(currentEmail);
+          const creatorArea = getUserArea(creadoPor);
+          if (!myArea || creatorArea !== myArea) {
+            return { status: "error", message: "Solo puedes eliminar checklists de tu equipo" };
+          }
         }
 
         resolvedSpreadsheetId = rowSpreadsheetId;
