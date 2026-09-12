@@ -1,13 +1,13 @@
-cba_id,fase,sec,tipo_tarea,ambito,descripcion,responsable
-N-A-01,PRE-INTERVENCIÓN,1,Verificación,Pre-Intervención,Validar versión actual del firmware,Ingeniero Senior
-N-A-01,PRE-INTERVENCIÓN,2,Validación,Pre-Intervención,Descargar versión nueva del firmware,Ingeniero Senior
-N-A-01,PRE-INTERVENCIÓN,3,Planificación,Pre-Intervención,Revisar ventana de mantenimiento y comunicar,Coordinador
-N-A-01,INTERVENCIÓN,4,Actualización,Intervención,Respaldar configuración actual,Ingeniero Senior
-N-A-01,INTERVENCIÓN,5,Actualización,Intervención,Instalar nuevo firmware,Ingeniero Senior
-N-A-01,INTERVENCIÓN,6,Validación,Intervención,Verificar reinicio correcto,Ingeniero Senior
-N-A-01,INTERVENCIÓN,7,Validación,Intervención,Verificar conectividad y funcionalidad,Ingeniero Senior
-N-A-01,POST-INTERVENCIÓN,8,Validación,Post-Intervención,Validar logs y alertas,Ingeniero Senior
-N-A-01,POST-INTERVENCIÓN,9,Documentación,Post-Intervención,Registrar cambios en CMDB,Administrador
-N-A-01,POST-INTERVENCIÓN,10,Comunicación,Post-Intervención,Informar a stakeholders,Coordinador
-N-A-01,RETORNO,11,Limpieza,Retorno,Limpiar archivos temporales,Ingeniero
-N-A-01,RETORNO,12,Cierre,Retorno,Cerrar ticket y generar reporte,Administrador
+cba_id,fase,sec,tipo_tarea,ambito,descripcion,responsable,tipo_paso
+N-A-01,PRE-INTERVENCIÓN,1,Verificación,Pre-Intervención,Validar versión actual del firmware,Ingeniero Senior,CBA
+N-A-01,PRE-INTERVENCIÓN,2,Validación,Pre-Intervención,Descargar versión nueva del firmware,Ingeniero Senior,CBA
+N-A-01,PRE-INTERVENCIÓN,3,Planificación,Pre-Intervención,Revisar ventana de mantenimiento y comunicar,Coordinador,CBA
+N-A-01,INTERVENCIÓN,4,Actualización,Intervención,Respaldar configuración actual,Ingeniero Senior,CBA
+N-A-01,INTERVENCIÓN,5,Actualización,Intervención,Instalar nuevo firmware,Ingeniero Senior,CBA
+N-A-01,INTERVENCIÓN,6,Validación,Intervención,Verificar reinicio correcto,Ingeniero Senior,CBA
+N-A-01,INTERVENCIÓN,7,Validación,Intervención,Verificar conectividad y funcionalidad,Ingeniero Senior,CBA
+N-A-01,POST-INTERVENCIÓN,8,Validación,Post-Intervención,Validar logs y alertas,Ingeniero Senior,CBA
+N-A-01,POST-INTERVENCIÓN,9,Documentación,Post-Intervención,Registrar cambios en CMDB,Administrador,CBA
+N-A-01,POST-INTERVENCIÓN,10,Comunicación,Post-Intervención,Informar a stakeholders,Coordinador,CBA
+N-A-01,RETORNO,11,Limpieza,Retorno,Limpiar archivos temporales,Ingeniero,CBA
+N-A-01,RETORNO,12,Cierre,Retorno,Cerrar ticket y generar reporte,Administrador,CBA

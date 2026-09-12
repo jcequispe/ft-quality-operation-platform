@@ -2428,6 +2428,7 @@ const API = {
     )
   },
   getCurrentUser()         { return this.call('getCurrentUser') },
+  switchMyRole(rol)        { return this.call('switchMyRole',{rol}) },
   getCBAs()                { return this.call('getCBAs') },
   getCBASteps(cbaId)       { return this.call('getCBASteps',{cbaId}) },
   createCBA(d)             { return this.call('createCBA',d) },
@@ -2529,6 +2530,8 @@ const API = {
     return this.call('deleteChecklist',{checklistId:cid,spreadsheetId:sid});
   },
   getReportData()          { return this.call('getReportData') },
+  getAdminChecklistStatus(scope) { return this.call('getAdminChecklistStatus',{scope}) },
+  syncOlderChecklists()    { return this.call('syncOlderChecklists') },
 };
 
 // ════════ UTILITIES ════════
@@ -2547,6 +2550,12 @@ const U = {
 
     if(lower==='' || lower.includes('borrador'))
       return `<span class="badge b-gray"><span class="dot"></span>Borrador</span>`;
+
+    if(lower.includes('creando'))
+      return `<span class="badge b-pending"><span class="dot"></span>Creando…</span>`;
+
+    if(lower.includes('error al crear'))
+      return `<span class="badge b-danger"><span class="dot"></span>Error al crear</span>`;
 
     if(lower.includes('bloq') || lower.includes('blocked'))
       return `<span class="badge b-danger"><span class="dot"></span>Bloqueado</span>`;
@@ -2605,6 +2614,7 @@ const Shell = {
   renderSidebar(u){
     const menus = {
       ADMIN:[
+        {view:'admin-status', icon:'checklist', label:'Estado Checklists'},
         {view:'cbas',    icon:'list',      label:'CBAs'},
         {view:'cba-form',icon:'plus',      label:'Crear CBA'},
         {view:'areas',   icon:'building',  label:'Áreas'},
@@ -2617,6 +2627,7 @@ const Shell = {
         {view:'cba-form',   icon:'plus',      label:'Crear CBA'},
         {view:'chk-form',   icon:'newfile',   label:'Nuevo Checklist'},
         {view:'checklists', icon:'checklist', label:'Checklists'},
+        {view:'users',      icon:'users',     label:'Mi Equipo'},
       ],
       OPERADOR:[
         {view:'checklists',icon:'checklist',label:'Mis Checklists'},
@@ -2625,6 +2636,7 @@ const Shell = {
     const items = menus[u.rol]||[];
     document.getElementById('sbRole').textContent = u.rol;
     document.getElementById('sbEmail').textContent = u.email;
+    const isDevAccount = (u.email||'').toLowerCase()==='jcequispe@gmail.com';
     document.getElementById('sbNav').innerHTML = `
       <div class="sidebar__section">Menú</div>
       ${items.map(m=>`
@@ -2633,7 +2645,25 @@ const Shell = {
           <span class="label">${m.label}</span>
         </button>
       `).join('')}
+      ${isDevAccount?`
+        <div class="sidebar__section">Rol de prueba (solo tú)</div>
+        <div style="padding:0 16px;display:flex;flex-direction:column;gap:6px">
+          ${['ADMIN','LIDER-TEAM','OPERADOR'].map(rol=>`
+            <button type="button" class="btn ${u.rol===rol?'btn-primary':'btn-secondary'} btn--sm" style="justify-content:flex-start" onclick="Shell.switchRole('${rol}')">${rol}</button>
+          `).join('')}
+        </div>
+      `:''}
     `;
+  },
+
+  async switchRole(rol){
+    U.load(true);
+    try{
+      const r=await API.switchMyRole(rol);
+      if(r.status==='ok'){ U.toast(`Rol cambiado a ${rol}. Recargando…`); setTimeout(()=>location.reload(),600); }
+      else U.toast(r.message,'err');
+    }catch(e){ U.toast(String(e),'err'); }
+    U.load(false);
   },
 };
 
@@ -2652,6 +2682,7 @@ const R = {
         case 'areas':      await V.areas(); break;
         case 'users':      await V.users(); break;
         case 'reports':    await V.reports(); break;
+        case 'admin-status': await V.adminStatus(); break;
         case 'chk-form':   await V.chkForm(); break;
         case 'checklists': await V.checklists(); break;
         case 'board':      await V.board(); break;
@@ -3067,6 +3098,55 @@ const V = {
     `;
   },
 
+  // ── Estado de Checklists (ADMIN) ──
+  async adminStatus(scope){
+    scope = scope || S.adminStatusScope || 'month';
+    S.adminStatusScope = scope;
+    const mc=document.getElementById('main');
+    mc.innerHTML=`<div class="page-hd"><div class="page-title">Estado de Checklists</div></div><div class="empty">Cargando…</div>`;
+    const r=await API.getAdminChecklistStatus(scope);
+    if(r.status!=='ok'){mc.innerHTML=`<div class="alert a-danger">${U.icon('info')} <div>${U.esc(r.message)}</div></div>`;return;}
+    const list=r.checklists||[];
+    const fases=['PRE-INTERVENCIÓN','INTERVENCIÓN','POST-INTERVENCIÓN','RETORNO'];
+    mc.innerHTML=`
+      <div class="page-hd">
+        <div class="page-hd__left">
+          <div class="page-title">Estado de Checklists</div>
+          <div class="page-sub">${scope==='month'?`${list.length} checklist(s) de este mes${r.omitted?` · ${r.omitted} más antiguos ocultos`:''}`:`${list.length} checklist(s) en total`}</div>
+        </div>
+        <div class="page-hd__actions">
+          ${scope==='month'?`<button class="btn btn-secondary" onclick="Admin.loadHistoric()">${U.icon('back')} Cargar histórico</button>`
+            :`<button class="btn btn-secondary" onclick="V.adminStatus('month')">${U.icon('back')} Solo este mes</button>`}
+        </div>
+      </div>
+      ${list.length===0?`<div class="empty">${U.icon('checklist',40)}<h3>Sin checklists${scope==='month'?' este mes':''}</h3></div>`:`
+      <div class="card"><div class="tbl-wrap"><table class="tbl">
+        <thead><tr><th>CRQ</th><th>CBA</th><th>Creado</th><th>Estado</th>
+          ${fases.map(f=>`<th style="font-size:10px">${f.replace('-INTERVENCIÓN','')}</th>`).join('')}
+          <th>Total</th><th></th></tr></thead>
+        <tbody>${list.map(c=>`<tr>
+          <td><strong>${U.esc(c.crq)}</strong>${!c.sincronizado?` <span title="Sin sincronizar" style="color:var(--warn)">●</span>`:''}</td>
+          <td><code style="font-size:11px">${U.esc(c.cbaId)}</code></td>
+          <td style="font-size:11px;color:var(--gray-500)">${U.esc(c.creadoPor)}</td>
+          <td>${U.estadoBadge(c.estado)}</td>
+          ${fases.map(f=>{
+            const pf=c.porFase&&c.porFase[f];
+            if(!pf||pf.total===0) return `<td style="text-align:center;color:var(--gray-300)">—</td>`;
+            const ok=pf.done===pf.total;
+            return `<td style="text-align:center;font-size:12px;color:${ok?'var(--ok)':'var(--gray-600)'}">${pf.done}/${pf.total}</td>`;
+          }).join('')}
+          <td style="min-width:90px">
+            <div style="display:flex;align-items:center;gap:6px">
+              <div style="flex:1;background:var(--gray-200);border-radius:6px;height:6px;overflow:hidden"><div style="width:${c.pct}%;height:100%;background:${c.pct===100?'var(--ok)':'var(--primary)'}"></div></div>
+              <span style="font-size:11px;font-weight:600">${c.pct}%</span>
+            </div>
+          </td>
+          <td><button class="btn btn-secondary btn--sm btn--icon" onclick="window.open('https://docs.google.com/spreadsheets/d/${c.spreadsheetId}','_blank')" title="Ver spreadsheet">${U.icon('link')}</button></td>
+        </tr>`).join('')}</tbody>
+      </table></div></div>`}
+    `;
+  },
+
   // ── Reportes ──
   async reports(){
     const mc=document.getElementById('main');
@@ -3183,6 +3263,14 @@ const V = {
             </div>
 
             <div class="fg">
+              <label class="fl">HUB <span class="req">*</span></label>
+              <select class="fc" id="chkHub" required>
+                <option value="PERÚ">PERÚ</option>
+                <option value="MÉXICO">MÉXICO</option>
+              </select>
+            </div>
+
+            <div class="fg">
               <label class="fl">Fecha de Inicio <span class="req">*</span></label>
               <input type="datetime-local" class="fc" id="chkFi" required />
             </div>
@@ -3219,6 +3307,7 @@ const V = {
     }
     const list=r.checklists||[];
     const user=S.user;
+    if(list.some(c=>c.estado==='Creando...')) Checklists.startPendingPoll();
     mc.innerHTML=`
       <div class="page-hd">
         <div class="page-hd__left">
@@ -3243,9 +3332,9 @@ const V = {
           <td><div class="btn-group">
             ${c.spreadsheetId&&c.spreadsheetId!=='undefined'?`
               <button class="btn btn-primary btn--sm" onclick="R.go('chk-editor',{sid:'${c.spreadsheetId}',cid:'${c.id}'})">${U.icon('eye')} ${S.isLider?'Abrir':'Completar'}</button>
-              <button class="btn btn-secondary btn--sm btn--icon" onclick="window.open('https://docs.google.com/spreadsheets/d/${c.spreadsheetId}','_blank')" title="Ver en Drive">${U.icon('link')}</button>
-            `:`<span style="font-size:12px;color:var(--danger)">Sin spreadsheet</span>`}
-            ${(S.isLider&&c.creadoPor.toLowerCase()===user.email.toLowerCase())||S.isAdmin?`
+              ${(S.isLider||S.isAdmin)?`<button class="btn btn-secondary btn--sm btn--icon" onclick="window.open('https://docs.google.com/spreadsheets/d/${c.spreadsheetId}','_blank')" title="Ver en Drive">${U.icon('link')}</button>`:''}
+            `:c.estado==='Creando...'?`<span style="font-size:12px;color:var(--gray-500)">Creando…</span>`:`<span style="font-size:12px;color:var(--danger)">Sin spreadsheet</span>`}
+            ${((S.isLider&&c.creadoPor.toLowerCase()===user.email.toLowerCase())||S.isAdmin)&&c.estado!=='Creando...'?`
               <button class="btn btn-danger btn--sm btn--icon" onclick="Checklists.del('${c.id}','${c.spreadsheetId}','${U.esc(c.crq)}')" title="Eliminar">${U.icon('trash')}</button>
             `:''}
           </div></td>
@@ -3280,7 +3369,7 @@ const V = {
           <div class="mcard__actions">
             ${c.spreadsheetId&&c.spreadsheetId!=='undefined'?`
               <button class="btn btn-primary" onclick="R.go('chk-editor',{sid:'${c.spreadsheetId}',cid:'${c.id}'})">${U.icon('eye')} ${S.isLider?'Abrir':'Completar'}</button>
-              <button class="btn btn-secondary" onclick="window.open('https://docs.google.com/spreadsheets/d/${c.spreadsheetId}','_blank')" title="Ver Drive">${U.icon('link')} Drive</button>
+              ${(S.isLider||S.isAdmin)?`<button class="btn btn-secondary" onclick="window.open('https://docs.google.com/spreadsheets/d/${c.spreadsheetId}','_blank')" title="Ver Drive">${U.icon('link')} Drive</button>`:''}
             `:''}
             ${(S.isLider&&c.creadoPor.toLowerCase()===user.email.toLowerCase())||S.isAdmin?`
               <button class="btn btn-danger" onclick="Checklists.del('${c.id}','${c.spreadsheetId}','${U.esc(c.crq)}')">${U.icon('trash')} Borrar</button>
@@ -3541,8 +3630,9 @@ const V = {
           const isAssignedToMe = assignedEmail && assignedEmail.toLowerCase()===user.email.toLowerCase();
           const isUnassigned = !assignedEmail || assignedEmail.trim()==='';
           const isAssignedToOther = assignedEmail && !isAssignedToMe;
-          // Puede editar si: es lider/admin, o el paso está asignado a él, o el paso no está asignado
-          const canEdit = isLider || isAssignedToMe || (S.isOper && isUnassigned);
+          // Acceso abierto: cualquier miembro del equipo (lider u operador) puede completar
+          // cualquier paso, esté o no "asignado" — la asignación es solo informativa/organizativa.
+          const canEdit = isLider || S.isOper;
           const isDone=String(row[10]||'').trim()!=='';
           const isStep=sec.match(/^\d+\.\d+/);
 
@@ -3796,6 +3886,18 @@ const Areas = {
   },
 };
 
+const Admin = {
+  async loadHistoric(){
+    U.load(true);
+    try{
+      const r=await API.syncOlderChecklists();
+      if(r.status==='ok'){ U.toast(r.message); await V.adminStatus('all'); }
+      else U.toast(r.message,'err');
+    }catch(e){ U.toast(String(e),'err'); }
+    U.load(false);
+  },
+};
+
 const Users = {
   _ed:null,
   openForm(user=null){
@@ -3810,6 +3912,15 @@ const Users = {
       document.getElementById('uEstado').value=user.estado||'';
       document.getElementById('uActivo').value=user.activo?'SI':'NO';
     } else { document.getElementById('uEmail').readOnly=false; }
+    // LIDER-TEAM solo puede registrar OPERADOR de su propia área — el backend lo
+    // fuerza igual, pero bloqueamos los campos para que no parezca un bug silencioso.
+    const rolSel=document.getElementById('uRol'), areaInp=document.getElementById('uArea');
+    if(!S.isAdmin){
+      rolSel.value='OPERADOR'; rolSel.disabled=true;
+      areaInp.value=S.user.area; areaInp.readOnly=true;
+    } else {
+      rolSel.disabled=false; areaInp.readOnly=false;
+    }
     Mod.open('mUser');
   },
   async save(e){
@@ -3855,7 +3966,7 @@ const StepsEd = {
     try{
       const r=await API.getCBASteps(cbaId);
       S.editCBA.pasos=r.status==='ok'?r.pasos:{preIntervention:[],intervention:[],postIntervention:[],return:[]};
-      this._pk.forEach(k=>{ const p=S.editCBA.pasos[k]||[]; p.forEach((s,i)=>s.sec=`${this._pp[k]}.${i+1}`); });
+      this._pk.forEach(k=>this._renumber(k));
     }catch(_){ S.editCBA.pasos={preIntervention:[],intervention:[],postIntervention:[],return:[]}; }
     U.load(false);
     this._render(); Mod.open('mSteps');
@@ -3872,11 +3983,18 @@ const StepsEd = {
         </div>
         <div style="overflow-x:auto">
           <table class="steps-tbl" id="st-${k}">
-            <thead><tr><th>Sec.</th><th>Tipo de Tarea</th><th>Descripción</th><th>Responsable</th><th></th></tr></thead>
-            <tbody>${steps.map((s,i)=>`<tr>
-              <td style="width:60px"><input value="${U.esc(s.sec)}" readonly data-ph="${k}" data-i="${i}" data-f="sec" /></td>
+            <thead><tr><th>Sec.</th><th>Tipo</th><th>Tipo de Tarea</th><th>Ámbito</th><th>Descripción</th><th>Responsable</th><th></th></tr></thead>
+            <tbody>${steps.map((s,i)=>`<tr${s.tipoPaso==='COOKBOOK'?' style="opacity:.7;font-style:italic"':''}>
+              <td style="width:70px"><input value="${U.esc(s.sec)}" readonly data-ph="${k}" data-i="${i}" data-f="sec" /></td>
+              <td style="width:110px">
+                <select data-ph="${k}" data-i="${i}" data-f="tipoPaso" onchange="StepsEd.retype('${k}',${i},this.value)">
+                  <option value="CBA" ${s.tipoPaso!=='COOKBOOK'?'selected':''}>CBA (obligatorio)</option>
+                  <option value="COOKBOOK" ${s.tipoPaso==='COOKBOOK'?'selected':''}>CookBook (opcional)</option>
+                </select>
+              </td>
               <td><input value="${U.esc(s.tipoTarea)}" placeholder="ej: Verificación" data-ph="${k}" data-i="${i}" data-f="tipoTarea" /></td>
-              <td><input value="${U.esc(s.descripcion)}" placeholder="Descripción del paso" data-ph="${k}" data-i="${i}" data-f="descripcion" /></td>
+              <td><input value="${U.esc(s.ambito||'')}" placeholder="ej: Perú" data-ph="${k}" data-i="${i}" data-f="ambito" /></td>
+              <td><input value="${U.esc(s.descripcion)}" placeholder="${s.tipoPaso==='COOKBOOK'?'Según CBA':'Descripción del paso'}" data-ph="${k}" data-i="${i}" data-f="descripcion" /></td>
               <td><input value="${U.esc(s.responsable||'')}" placeholder="Responsable" data-ph="${k}" data-i="${i}" data-f="responsable" /></td>
               <td style="width:36px"><button class="btn btn-danger btn--xs btn--icon" onclick="StepsEd.rm('${k}',${i})">${U.icon('trash',12)}</button></td>
             </tr>`).join('')}</tbody>
@@ -3884,6 +4002,31 @@ const StepsEd = {
         </div>
       </div>`;
     }).join('');
+  },
+
+  /** Renumera los pasos de una fase: CBA → "N.M" secuencial; COOKBOOK → "CB N,Ma" ligado al CBA precedente */
+  _renumber(k){
+    const steps=S.editCBA.pasos[k]||[];
+    const prefix=this._pp[k];
+    let cbaCounter=0, lastCbaNum='', cookbookSub=0;
+    steps.forEach(s=>{
+      if(s.tipoPaso==='COOKBOOK'){
+        cookbookSub+=1;
+        const letter=String.fromCharCode(96+cookbookSub);
+        s.sec=lastCbaNum?`CB ${prefix},${lastCbaNum.split('.')[1]}${letter}`:`CB ${prefix}${letter}`;
+      } else {
+        cbaCounter+=1; cookbookSub=0;
+        lastCbaNum=`${prefix}.${cbaCounter}`;
+        s.sec=lastCbaNum;
+      }
+    });
+  },
+
+  retype(k,idx,value){
+    this._sync();
+    S.editCBA.pasos[k][idx].tipoPaso=value;
+    this._renumber(k);
+    this._render();
   },
 
   _sync(){
@@ -3896,18 +4039,19 @@ const StepsEd = {
   add(k){
     this._sync();
     const steps=S.editCBA.pasos[k];
-    steps.push({sec:`${this._pp[k]}.${steps.length+1}`,tipoTarea:'',ambito:k,descripcion:'',responsable:''});
+    steps.push({sec:'',tipoTarea:'',ambito:'',descripcion:'',responsable:'',tipoPaso:'CBA'});
+    this._renumber(k);
     this._render();
     setTimeout(()=>{
       const rows=document.querySelectorAll(`#st-${k} tbody tr`);
-      if(rows.length) rows[rows.length-1].querySelectorAll('input')[2]?.focus();
+      if(rows.length) rows[rows.length-1].querySelectorAll('input')[1]?.focus();
     },50);
   },
 
   rm(k,idx){
     this._sync();
     S.editCBA.pasos[k].splice(idx,1);
-    S.editCBA.pasos[k].forEach((s,i)=>s.sec=`${this._pp[k]}.${i+1}`);
+    this._renumber(k);
     this._render();
   },
 
@@ -3940,11 +4084,47 @@ const Checklists = {
         tipoChangio:document.getElementById('chkTipo').value,
         level:document.getElementById('chkLvl').value,
         freezing:document.getElementById('chkFrz').value,
+        hub:document.getElementById('chkHub').value,
       });
-      if(r.status==='ok'){ R.go('checklists'); U.toast('Checklist creado exitosamente'); }
+      if(r.status==='ok'){
+        R.go('checklists');
+        U.toast(r.pending?'Checklist en creación — te avisamos aquí cuando esté listo':'Checklist creado exitosamente');
+        if(r.pending) this.startPendingPoll();
+      }
       else U.toast(r.message,'err');
     }catch(e){ U.toast(String(e),'err'); }
     U.load(false);
+  },
+
+  // ── Notificación en la web para checklists que se están creando en background ──
+  _pollTimer:null,
+  _pendingIds:null,
+  startPendingPoll(){
+    if(this._pollTimer) return; // ya hay un polling activo
+    this._pollTimer=setInterval(async ()=>{
+      let r;
+      try{ r=await API.getMyChecklists(); }catch(e){ return; }
+      if(!r||r.status!=='ok') return;
+      const list=r.checklists||[];
+      const pending=list.filter(c=>c.estado==='Creando...');
+      const pendingIds=new Set(pending.map(c=>c.id));
+
+      if(this._pendingIds){
+        const finished=[...this._pendingIds].filter(id=>!pendingIds.has(id));
+        finished.forEach(id=>{
+          const found=list.find(c=>c.id===id);
+          if(found && found.estado==='Error al crear') U.toast(`Error al crear el checklist ${found.crq}`,'err');
+          else U.toast(`Checklist ${found?found.crq:''} listo ✓`);
+        });
+      }
+      this._pendingIds=pendingIds;
+
+      if(pendingIds.size===0){
+        clearInterval(this._pollTimer); this._pollTimer=null; this._pendingIds=null;
+      }
+      if(R.cur==='checklists') V.checklists();
+      else if(R.cur==='board') V.board();
+    },5000);
   },
 
   async saveStep(phase, ri, sec){
